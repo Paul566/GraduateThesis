@@ -23,7 +23,7 @@ def solve_primal(grid, support_a_func, support_b_func, method='highs'):
     return ans
 
 
-def solve_dual(grid, support_a_func, support_b_func, method='highs', eps=0.):
+def solve_dual(grid, support_a_func, support_b_func, method, eps=0.):
     """
     solves the dual problem for the approximated A and B
     """
@@ -48,7 +48,7 @@ def solve_dual(grid, support_a_func, support_b_func, method='highs', eps=0.):
     return np.linalg.solve(matrix, rhs)
 
 
-def solve_dual_return_lambdas(grid, support_a_func, support_b_func, method='highs'):
+def solve_dual_return_lambdas(grid, support_a_func, support_b_func, method):
     support_a = np.array([support_a_func(p) for p in grid])
     support_b = np.array([support_b_func(p) for p in grid])
 
@@ -78,7 +78,7 @@ def solve_dual_return_lambdas(grid, support_a_func, support_b_func, method='high
 '''
 
 
-def example_square(n):
+def example_square(n, method):
     """
     A = a square in a unit circle rotated by 1 radian
     B = a unit circle
@@ -91,13 +91,13 @@ def example_square(n):
         [np.cos(1 + np.pi), np.sin(1 + np.pi)],
         [np.cos(1 + np.pi * 3 / 2), np.sin(1 + np.pi * 3 / 2)]
     ])  # A is a rotated square
-    ans = solve_dual(grid, lambda x: support_poly(x, vertices_a), lambda x: 1)
+    ans = solve_primal(grid, lambda x: support_poly(x, vertices_a), lambda x: 1, method)
     if ans is None:
         return None, None
     return np.sqrt(ans[0] ** 2 + ans[1] ** 2), np.abs(ans[2] - 1)
 
 
-def example_triangle(n):
+def example_triangle(n, method):
     """
     A = a triangle in a unit circle rotated by 1 radian
     B = a unit circle
@@ -108,15 +108,30 @@ def example_triangle(n):
         [np.cos(1), np.sin(1)],
         [np.cos(1 + 2 * np.pi / 3), np.sin(1 + 2 * np.pi / 3)],
         [np.cos(1 + 4 * np.pi / 3), np.sin(1 + 4 * np.pi / 3)]
-    ])  # A is a rotated square
-    ans = solve_primal(grid, lambda x: support_poly(x, vertices_a), lambda x: 1, method='highs')
+    ])  # A is a rotated triangle
+    ans = solve_primal(grid, lambda x: support_poly(x, vertices_a), lambda x: 1, method)
     if ans is None:
         return None, None
     return np.sqrt(ans[0] ** 2 + ans[1] ** 2), np.abs(ans[2] - 1)
 
 
-def run_tests(n_start=99, n_end=10000, n_step=100, err_filename='err',
-              time_filename='time', example_function=example_square):
+def example_random_pentagon(n, method):
+    """
+    A = a pentagon in a unit circle with random vertices but the center is guaranteed to be in 0, 0
+    B = a unit circle
+    returns the error of x and t
+    """
+    grid = np.transpose((np.cos(np.arange(n) * 2 * np.pi / n), np.sin(np.arange(n) * 2 * np.pi / n)))
+    angles = np.random.rand(5) + 2 * np.pi / 5 * np.arange(5)
+    vertices_a = np.array([[np.cos(a), np.sin(a)] for a in angles])
+    ans = solve_primal(grid, lambda x: support_poly(x, vertices_a), lambda x: 1, method)
+    if ans is None:
+        return None, None
+    return np.sqrt(ans[0] ** 2 + ans[1] ** 2), np.abs(ans[2] - 1)
+
+
+def run_tests(n_start=100, n_end=10000, n_step=100, err_filename='err',
+              time_filename='time', example_function=example_square, method='highs'):
     n = range(n_start, n_end, n_step)
     err_x = []
     err_t = []
@@ -124,9 +139,10 @@ def run_tests(n_start=99, n_end=10000, n_step=100, err_filename='err',
 
     for _n in n:
         start = time.time()
-        _errX, _errT = example_function(_n)
+        _errX, _errT = example_function(_n, method)
         end = time.time()
-        print(_n, '\t', end - start, '\t', _errX, '\t', _errT)
+        if _errX is None:
+            print(_n, '\t', end - start, '\t', _errX, '\t', _errT)
         times.append(end - start)
         err_x.append(_errX)
         err_t.append(_errT)
@@ -150,4 +166,4 @@ def run_tests(n_start=99, n_end=10000, n_step=100, err_filename='err',
 
 
 if __name__ == '__main__':
-    run_tests(n_step=100, example_function=example_triangle)
+    run_tests(n_step=97, example_function=example_random_pentagon)
