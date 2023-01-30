@@ -1,0 +1,131 @@
+(* Content-type: application/vnd.wolfram.mathematica *)
+
+(*** Wolfram Notebook File ***)
+(* http://www.wolfram.com/nb *)
+
+(* CreatedBy='Mathematica 13.0' *)
+
+(*CacheID: 234*)
+(* Internal cache information:
+NotebookFileLineBreakTest
+NotebookFileLineBreakTest
+NotebookDataPosition[       158,          7]
+NotebookDataLength[      4669,        123]
+NotebookOptionsPosition[      4040,        106]
+NotebookOutlinePosition[      4438,        122]
+CellTagsIndexPosition[      4395,        119]
+WindowFrame->Normal*)
+
+(* Beginning of Notebook Content *)
+Notebook[{
+Cell[BoxData[
+ RowBox[{
+  RowBox[{
+   RowBox[{"spherePoint", "[", 
+    RowBox[{"dim_", ",", "dummyvar_"}], "]"}], ":=", 
+   RowBox[{
+    RowBox[{"Table", "[", 
+     RowBox[{
+      RowBox[{"RandomVariate", "[", 
+       RowBox[{"NormalDistribution", "[", "]"}], "]"}], ",", "dim"}], "]"}], "//",
+     "Normalize"}]}], ";"}]], "Input",
+ CellChangeTimes->{{3.881589873569262*^9, 3.8815900027050467`*^9}, {
+  3.8815929973213654`*^9, 3.881592999969743*^9}, {3.8815932880278263`*^9, 
+  3.881593315715022*^9}, {3.881593593670076*^9, 3.8815935964773912`*^9}, {
+  3.881594655882042*^9, 3.881594715009541*^9}, {3.88159560520413*^9, 
+  3.881595605354123*^9}, {3.881597007543117*^9, 3.88159701041079*^9}},
+ CellLabel->
+  "In[119]:=",ExpressionUUID->"0443c223-43a7-4585-8d5a-7b092d5768dc"],
+
+Cell[BoxData[
+ RowBox[{
+  RowBox[{"zeroInsideSimplex", "[", "vertices_", "]"}], ":=", 
+  RowBox[{"RegionWithin", "[", 
+   RowBox[{
+    RowBox[{"Simplex", "[", "vertices", "]"}], ",", 
+    RowBox[{"Point", "[", 
+     RowBox[{"Table", "[", 
+      RowBox[{"0", ",", 
+       RowBox[{
+        RowBox[{"Length", "[", "vertices", "]"}], "-", "1"}]}], "]"}], 
+     "]"}]}], "]"}]}]], "Input",
+ CellChangeTimes->{{3.8815935456912193`*^9, 3.8815935712837257`*^9}, {
+   3.881594693159862*^9, 3.881594700016921*^9}, {3.88159475813096*^9, 
+   3.881594781489723*^9}, {3.881595204604437*^9, 3.881595229771208*^9}, {
+   3.881595408565267*^9, 3.88159545764117*^9}, {3.88159557299831*^9, 
+   3.88159557723238*^9}, 3.8815957414172077`*^9, {3.881596358193746*^9, 
+   3.881596379861022*^9}, {3.881596412750187*^9, 3.881596412785483*^9}},
+ CellLabel->
+  "In[120]:=",ExpressionUUID->"12c80ad8-fa74-4bf7-a720-4d8928a3c474"],
+
+Cell[BoxData[
+ RowBox[{
+  RowBox[{"generateSimplexWithZeroInside", "[", "dim_", "]"}], ":=", 
+  RowBox[{"NestWhile", "[", 
+   RowBox[{
+    RowBox[{
+     RowBox[{"Table", "[", 
+      RowBox[{
+       RowBox[{"spherePoint", "[", 
+        RowBox[{"dim", ",", "#"}], "]"}], ",", 
+       RowBox[{"dim", "+", "1"}]}], "]"}], "&"}], ",", 
+    RowBox[{"Table", "[", 
+     RowBox[{
+      RowBox[{"spherePoint", "[", "dim", "]"}], ",", 
+      RowBox[{"dim", "+", "1"}]}], "]"}], ",", 
+    RowBox[{
+     RowBox[{"Not", "@", 
+      RowBox[{"zeroInsideSimplex", "[", "#", "]"}]}], "&"}]}], 
+   "]"}]}]], "Input",
+ CellChangeTimes->{{3.881596552433496*^9, 3.881596594786099*^9}, {
+   3.881596655538719*^9, 3.881596778196994*^9}, {3.88159686119342*^9, 
+   3.88159686327964*^9}, 3.881596942012506*^9, {3.881597028992543*^9, 
+   3.881597029296897*^9}, {3.881597106868044*^9, 3.881597151977375*^9}, {
+   3.881597384635911*^9, 3.8815973851845207`*^9}, {3.881597450088738*^9, 
+   3.881597470610496*^9}},
+ CellLabel->
+  "In[218]:=",ExpressionUUID->"c2d18e9c-eb2b-4b8f-83ab-f8dd5dfbd2bb"],
+
+Cell[BoxData[
+ RowBox[{"Do", "[", 
+  RowBox[{
+   RowBox[{"Export", "[", 
+    RowBox[{
+     RowBox[{
+      RowBox[{"NotebookDirectory", "[", "]"}], "<>", "\"\<tests/5d/\>\"", "<>", 
+      RowBox[{"ToString", "[", "n", "]"}], "<>", "\"\<.csv\>\""}], ",", 
+     RowBox[{"generateSimplexWithZeroInside", "[", "5", "]"}]}], "]"}], ",", 
+   RowBox[{"{", 
+    RowBox[{"n", ",", "100"}], "}"}]}], "]"}]], "Input",
+ CellChangeTimes->{{3.881597537172502*^9, 3.8815976278560057`*^9}, 
+   3.8815976604754963`*^9, {3.881597706661632*^9, 3.881597716968944*^9}, {
+   3.881598647222858*^9, 3.881598675008732*^9}, {3.881598718732532*^9, 
+   3.881598765081654*^9}},
+ CellLabel->
+  "In[257]:=",ExpressionUUID->"742131cb-18a2-4d23-96f4-d3cc2e3f1aed"]
+},
+WindowSize->{606., 659.25},
+WindowMargins->{{363, Automatic}, {48, Automatic}},
+FrontEndVersion->"13.0 for Linux x86 (64-bit) (December 2, 2021)",
+StyleDefinitions->"Default.nb",
+ExpressionUUID->"bcb89b40-7359-4b2d-9832-57bd79541391"
+]
+(* End of Notebook Content *)
+
+(* Internal cache information *)
+(*CellTagsOutline
+CellTagsIndex->{}
+*)
+(*CellTagsIndex
+CellTagsIndex->{}
+*)
+(*NotebookFileOutline
+Notebook[{
+Cell[558, 20, 775, 17, 51, "Input",ExpressionUUID->"0443c223-43a7-4585-8d5a-7b092d5768dc"],
+Cell[1336, 39, 899, 19, 71, "Input",ExpressionUUID->"12c80ad8-fa74-4bf7-a720-4d8928a3c474"],
+Cell[2238, 60, 1065, 26, 71, "Input",ExpressionUUID->"c2d18e9c-eb2b-4b8f-83ab-f8dd5dfbd2bb"],
+Cell[3306, 88, 730, 16, 81, "Input",ExpressionUUID->"742131cb-18a2-4d23-96f4-d3cc2e3f1aed"]
+}
+]
+*)
+
