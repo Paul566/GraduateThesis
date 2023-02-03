@@ -6,7 +6,7 @@ from utils import random_spherical_grid, random_spherical_cap_grid, solve_primal
 class IterativeSolver:
     def __init__(self, dimension: int, support_a: tp.Callable, support_b: tp.Callable,
                  initial_grid_size: int = 100, initial_cap_radius: float = 1, number_of_gridpoints_in_cap: int = 100,
-                 max_iteration: int = 1000, tolerance: float = 1e-9) -> None:
+                 max_iteration: int = 100, tolerance: float = 1e-9) -> None:
         self.support_a = support_a
         self.support_b = support_b
         self.dimension = dimension

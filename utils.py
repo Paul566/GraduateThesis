@@ -1,3 +1,7 @@
+import logging
+import os
+import time
+
 import numpy as np
 import typing as tp
 import sys
@@ -92,8 +96,31 @@ def random_spherical_cap_grid(center: np.ndarray, radius: float, grid_size: int)
     return grid.T
 
 
-def read_tests_simplex_in_ball(dimension: int, test_number: int) -> tp.Tuple[tp.Callable, tp.Callable]:
-    vertices = np.genfromtxt(f'./tests/{dimension}d/{test_number}.csv', delimiter=',')
+def read_tests_simplex_in_ball(path: str) -> tp.Tuple[tp.Callable, tp.Callable]:
+    vertices = np.genfromtxt(path, delimiter=',')
     support_a = lambda grid: np.max(vertices @ grid.T, axis=0)
     support_b = lambda grid: np.ones(len(grid))
     return support_a, support_b
+
+
+def run_tests(solver: tp.Type, dimension: int, solver_kwargs: tp.Dict[str, tp.Any],
+              test_reader_function: tp.Callable, path_to_tests: str) -> tp.Tuple[np.ndarray, np.ndarray]:
+    times = []
+    t_accuracies = []
+    for file in os.listdir(path_to_tests):
+        support_a, support_b = test_reader_function(f'{path_to_tests}/{file}')
+        solver_instance = solver(dimension, support_a, support_b, **solver_kwargs)
+        start_time = time.time()
+        solver_instance.solve()
+        end_time = time.time()
+        times.append(end_time - start_time)
+        t_accuracies.append(abs(1. - solver_instance.t))
+        print(f'test \t{file}\t time \t{end_time - start_time}\t t_error \t{abs(1. - solver_instance.t)}')
+
+    return np.array(times), np.array(t_accuracies)
+
+
+
+
+
+

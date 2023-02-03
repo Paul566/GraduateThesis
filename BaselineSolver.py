@@ -3,7 +3,7 @@ from utils import random_spherical_grid, solve_primal
 
 
 class BaselineSolver:
-    def __init__(self, dimension: int, support_a: tp.Callable, support_b: tp.Callable, grid_size: int) -> None:
+    def __init__(self, dimension: int, support_a: tp.Callable, support_b: tp.Callable, grid_size: int = 1000) -> None:
         self.support_a = support_a
         self.support_b = support_b
         self.dimension = dimension
