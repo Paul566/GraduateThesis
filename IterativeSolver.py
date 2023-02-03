@@ -1,17 +1,20 @@
+import warnings
+
 import numpy as np
 import typing as tp
-from utils import random_spherical_grid, random_spherical_cap_grid, solve_primal
+from utils import random_spherical_grid, random_spherical_cap_grid, solve_primal, sphere_volume, ball_volume
 
 
 class IterativeSolver:
     def __init__(self, dimension: int, support_a: tp.Callable, support_b: tp.Callable,
-                 initial_grid_size: int = 100, initial_cap_radius: float = 1, number_of_gridpoints_in_cap: int = 100,
-                 max_iteration: int = 100, tolerance: float = 1e-9) -> None:
+                 initial_grid_density: int = 100, initial_cap_radius: float = 0.1,
+                 density_of_gridpoints_in_unit_cap: float = 100., max_iteration: int = 10,
+                 tolerance: float = 1e-9) -> None:
         self.support_a = support_a
         self.support_b = support_b
         self.dimension = dimension
-        self.initial_grid_size = initial_grid_size
-        self.number_of_gridpoints_in_cap = number_of_gridpoints_in_cap
+        self.initial_grid_size = int(sphere_volume(dimension) * initial_grid_density)
+        self.number_of_gridpoints_in_cap = int(density_of_gridpoints_in_unit_cap * ball_volume(dimension - 1))
         self.cap_radius = initial_cap_radius
         self.x: np.ndarray | None = None
         self.t: float | None = None
@@ -53,15 +56,19 @@ class IterativeSolver:
                     break
 
             if not found_based_vector: # no exact <p, x> + supp(p, B) = supp(p, A), use finite tolerance
+                best_p = grid_in_cap[0]
+                best_delta = grid_in_cap[0] @ self.x + support_b_values_in_cap[0] * self.t - support_a_values_in_cap[0]
                 for p, supp_a, supp_b in zip(grid_in_cap, support_a_values_in_cap, support_b_values_in_cap):
                     delta = p @ self.x + supp_b * self.t - supp_a
-                    if - self.tolerance < delta < self.tolerance:
-                        ans.append(p)
-                        found_based_vector = True
-                        break
+                    if delta < best_delta:
+                        best_p = p
+                        best_delta = delta
 
-            if not found_based_vector:
-                raise Exception(f'Failed to find a based vector with tolerance {self.tolerance}')
+                ans.append(best_p)
+
+                if best_delta > self.tolerance:
+                    warnings.warn(f'Failed to find a based vector with tolerance {self.tolerance} in some cap, '
+                                  'using the one with minimal (<p, x> + supp(p, B) - supp(p, A))')
 
         return np.array(ans)
 

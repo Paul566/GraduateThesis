@@ -1,7 +1,7 @@
-import logging
 import os
+import random
 import time
-
+import scipy
 import numpy as np
 import typing as tp
 import sys
@@ -20,6 +20,22 @@ def solve_primal(grid: np.ndarray, support_a_values: np.ndarray, support_b_value
         raise e
 
     return t, x
+
+
+def sphere_volume(dimension: int):
+    """
+    :param dimension:
+    :return: returns the volume of a (dimension - 1)-dimensional unit sphere (in R^dimension)
+    """
+    return 2 * np.pi**(dimension / 2) / scipy.special.gamma(dimension / 2)
+
+
+def ball_volume(dimension: int):
+    """
+    :param dimension:
+    :return: returns the volume of a dimension-dimensional unit ball
+    """
+    return np.pi**(dimension / 2) / scipy.special.gamma(dimension / 2 + 1)
 
 
 def random_spherical_point(dimension: int):
@@ -103,8 +119,8 @@ def read_tests_simplex_in_ball(path: str) -> tp.Tuple[tp.Callable, tp.Callable]:
     return support_a, support_b
 
 
-def run_tests(solver: tp.Type, dimension: int, solver_kwargs: tp.Dict[str, tp.Any],
-              test_reader_function: tp.Callable, path_to_tests: str) -> tp.Tuple[np.ndarray, np.ndarray]:
+def run_tests(solver: tp.Type, dimension: int, solver_kwargs: tp.Dict[str, tp.Any], test_reader_function: tp.Callable,
+              path_to_tests: str, silent: bool=False) -> tp.Tuple[np.ndarray, np.ndarray]:
     times = []
     t_accuracies = []
     for file in os.listdir(path_to_tests):
@@ -115,9 +131,23 @@ def run_tests(solver: tp.Type, dimension: int, solver_kwargs: tp.Dict[str, tp.An
         end_time = time.time()
         times.append(end_time - start_time)
         t_accuracies.append(abs(1. - solver_instance.t))
-        print(f'test \t{file}\t time \t{end_time - start_time}\t t_error \t{abs(1. - solver_instance.t)}')
+        if not silent:
+            print(f'test \t{file}\t time \t{end_time - start_time}\t t_error \t{abs(1. - solver_instance.t)}')
 
     return np.array(times), np.array(t_accuracies)
+
+
+def run_random_test(solver: tp.Type, dimension: int, solver_kwargs: tp.Dict[str, tp.Any], test_reader_function: tp.Callable,
+              path_to_tests: str, silent: bool=False) -> tp.Tuple[float, float]:
+    file = random.choice(os.listdir(path_to_tests))
+    support_a, support_b = test_reader_function(f'{path_to_tests}/{file}')
+    solver_instance = solver(dimension, support_a, support_b, **solver_kwargs)
+    start_time = time.time()
+    solver_instance.solve()
+    end_time = time.time()
+    if not silent:
+        print(f'test \t{file}\t time \t{end_time - start_time}\t t_error \t{abs(1. - solver_instance.t)}')
+    return end_time - start_time, abs(1. - solver_instance.t)
 
 
 
