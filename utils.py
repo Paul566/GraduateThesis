@@ -112,6 +112,47 @@ def random_spherical_cap_grid(center: np.ndarray, radius: float, grid_size: int)
     return grid.T
 
 
+def uniform_spherical_coordinates(dimension: int, num_points_in_pi: int) -> np.ndarray:
+    linspaces = [np.linspace(0, np.pi, num_points_in_pi + 1) for _ in range(dimension - 2)]
+    linspaces.append(np.linspace(0, 2 * np.pi, 2 * num_points_in_pi + 1))
+    coordinate_grids = np.meshgrid(* linspaces)
+    return np.vstack([coordinates.flatten() for coordinates in coordinate_grids]).T
+
+
+def spherical_grid_uniform_coordinates(dimension: int, grid_size: int) -> np.ndarray:
+    num_points_in_pi = int((grid_size / 2.) ** (1. / (dimension - 1)))
+    phis = uniform_spherical_coordinates(dimension, num_points_in_pi)
+    cos_parts = np.hstack((np.cos(phis), np.ones((len(phis), 1))))
+    sin_parts = np.hstack((np.ones((len(phis), 1)), np.cumprod(np.sin(phis), axis=1)))
+    return sin_parts * cos_parts
+
+
+def ball_grid_uniform_spherical_coordinates(dimension: int, grid_size: int) -> np.ndarray:
+    num_points_in_pi = int((grid_size * np.pi / 2) ** (1. / dimension))
+    num_radii = int(num_points_in_pi / np.pi)
+    sphere_grids = []   # todo: rewrite avoiding loops
+    for r in np.linspace(0, 1, num_radii + 1):
+        print(r)
+        sphere_grids.append(r * spherical_grid_uniform_coordinates(dimension, int(num_points_in_pi * (r ** (dimension - 1)))))
+    return np.vstack(sphere_grids)
+
+
+def spherical_cap_grid_uniform_coordinates(center: np.ndarray, radius: float, grid_size: int) -> np.ndarray:
+    """
+    :param center: center of the spherical cap
+    :param radius: radius of the spherical cap (in radians), should be small
+    :param grid_size: the number of the gridpoints
+    :return: a grid on the spherical cap, spherical coordinates on the cap as a dim-1 - dimensional ball are uniform
+    """
+    dim = len(center)
+    rotation = rotation_to_point(center)
+    unrotated_grid = ball_grid_uniform_spherical_coordinates(dim - 1, grid_size)
+    first_column = np.ones(grid_size)
+    grid = rotation @ np.vstack((first_column, unrotated_grid.T * radius))
+    grid = grid / np.linalg.norm(grid, axis=0)
+    return grid.T
+
+
 def read_tests_simplex_in_ball(path: str) -> tp.Tuple[tp.Callable, tp.Callable]:
     vertices = np.genfromtxt(path, delimiter=',')
     support_a = lambda grid: np.max(vertices @ grid.T, axis=0)
