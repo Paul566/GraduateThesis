@@ -1,5 +1,5 @@
 import typing as tp
-from utils import random_spherical_grid, solve_primal, sphere_volume
+from utils import sphere_grid_from_cube, solve_primal, sphere_volume
 
 
 class BaselineSolver:
@@ -12,7 +12,7 @@ class BaselineSolver:
         self.t = None
 
     def solve(self) -> None:
-        grid = random_spherical_grid(self.dimension, self.grid_size)
+        grid = sphere_grid_from_cube(self.dimension, self.grid_size)
         support_a_values = self.support_a(grid)
         support_b_values = self.support_b(grid)
         self.t, self.x = solve_primal(grid, support_a_values, support_b_values)

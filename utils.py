@@ -4,7 +4,6 @@ import time
 import scipy
 import numpy as np
 import typing as tp
-import sys
 from scipy.optimize import linprog
 
 
@@ -12,14 +11,8 @@ def solve_primal(grid: np.ndarray, support_a_values: np.ndarray, support_b_value
         tp.Tuple[tp.Optional[float], tp.Optional[np.ndarray]]:
     q_0 = np.array([0] * len(grid[0]) + [1])
     a_ub = np.hstack((grid, support_b_values.reshape((len(grid), 1))))
-    result = linprog(q_0, A_ub=-a_ub, b_ub=-support_a_values, method='highs', bounds=(None, None))
-    try:
-        t, x = result.x[-1], result.x[:-1]
-    except TypeError as e:
-        sys.stderr.write(f'linprog status {result.status}')
-        raise e
-
-    return t, x
+    result = linprog(q_0, A_ub=-a_ub, b_ub=-support_a_values, bounds=(None, None))
+    return result.x[-1], result.x[:-1]
 
 
 def sphere_volume(dimension: int):
@@ -151,6 +144,66 @@ def spherical_cap_grid_uniform_coordinates(center: np.ndarray, radius: float, gr
     grid = rotation @ np.vstack((first_column, unrotated_grid.T * radius))
     grid = grid / np.linalg.norm(grid, axis=0)
     return grid.T
+
+
+def sphere_grid_from_cube(dimension: int, grid_size: int) -> np.ndarray:
+    """
+    :param dimension:
+    :param grid_size:
+    :return: a grid with about grid_size gridpoints on a unit sphere
+                obtained via normalization of a grid on a surface of a cube
+    """
+    num_points_in_edge = int(np.power(grid_size / 2 / dimension, 1 / (dimension - 1)))
+
+    grids_of_cube_faces = []
+    for i in range(dimension):
+        linspaces = [np.linspace(- 1, 1, num_points_in_edge + 1) for _ in range(i)] + \
+                    [np.array([1])] + \
+                    [np.linspace(- 1, 1, num_points_in_edge + 1) for _ in range(dimension - i - 1)]
+        coordinate_grids = np.meshgrid(*linspaces)
+        grid_of_cube_face = np.vstack([coordinates.flatten() for coordinates in coordinate_grids]).T
+        grids_of_cube_faces.append(grid_of_cube_face)
+        grids_of_cube_faces.append(- grid_of_cube_face)
+
+    cube_grid = np.vstack(grids_of_cube_faces)
+
+    return np.unique(cube_grid / np.linalg.norm(cube_grid, axis=1)[:, np.newaxis], axis=0)
+
+
+def ball_grid_from_cube(dimension: int, grid_size: int) -> np.ndarray:
+    """
+        :param dimension:
+        :param grid_size:
+        :return: a grid with about grid_size gridpoints in a unit ball
+                    obtained via normalization of a grid in a cube
+        """
+    num_points_in_edge = int(np.power(grid_size, 1 / dimension))
+    if num_points_in_edge % 2 == 1:  # if num_points_in_edge was odd, there will be unnormalizable zero gridpoint
+        num_points_in_edge += 1
+
+    linspaces = [np.linspace(- 1, 1, num_points_in_edge) for _ in range(dimension)]
+    coordinate_grids = np.meshgrid(*linspaces)
+    grid_in_cube = np.vstack([coordinates.flatten() for coordinates in coordinate_grids]).T
+
+    return grid_in_cube / np.linalg.norm(grid_in_cube, axis=1)[:, np.newaxis] * \
+        np.linalg.norm(grid_in_cube, axis=1, ord=np.inf)[:, np.newaxis]
+
+
+def spherical_cap_grid_from_cube(center: np.ndarray, radius: float, grid_size: int) -> np.ndarray:
+    """
+    :param center: center of the spherical cap
+    :param radius: radius of the spherical cap (in radians), should be small
+    :param grid_size: the number of the gridpoints
+    :return: a grid on the spherical cap, spherical coordinates on the cap as a dim-1 - dimensional ball are uniform
+    """
+    dim = len(center)
+    rotation = rotation_to_point(center)
+    unrotated_grid = ball_grid_from_cube(dim - 1, grid_size)
+    first_column = np.ones(len(unrotated_grid))
+    grid = rotation @ np.vstack((first_column, unrotated_grid.T * radius))
+    grid = (grid / np.linalg.norm(grid, axis=0)).T
+    grid = np.vstack((grid, center)) # add the center of the cap to the grid in case it was a good based point
+    return grid
 
 
 def read_tests_simplex_in_ball(path: str) -> tp.Tuple[tp.Callable, tp.Callable]:
