@@ -5,6 +5,7 @@ import scipy
 import numpy as np
 import typing as tp
 from scipy.optimize import linprog
+from scipy.linalg import expm
 
 
 def solve_primal(grid: np.ndarray, support_a_values: np.ndarray, support_b_values: np.ndarray) -> \
@@ -204,6 +205,30 @@ def spherical_cap_grid_from_cube(center: np.ndarray, radius: float, num_points_i
     grid = (grid / np.linalg.norm(grid, axis=0)).T
     grid = np.vstack((grid, center)) # add the center of the cap to the grid in case it was a good based point
     return grid
+
+
+def random_rotation_via_exp(dimension: int, upper_bound: float = 10) -> np.ndarray:
+    """
+    :param dimension:
+    :param upper_bound:
+    :return: generates a random antisymmetric matrix with coefficients between -upper_bound and upper_bound
+    and returns its matrix exponent
+    """
+    random_matrix = np.random.rand(dimension, dimension)
+    antisymmetric_matrix = (random_matrix - random_matrix.T) * upper_bound
+    return expm(antisymmetric_matrix)
+
+
+def sphere_grid_from_cube_with_random_rotation(dimension: int, num_points_in_edge: int) -> np.ndarray:
+    """
+    :param dimension:
+    :param num_points_in_edge:
+    :return: a randomly rotated grid with (2 * dimension * num_points_in_edge ** (dimension - 1)) gridpoints
+    on a unit sphere obtained via normalization of a grid on a surface of a cube
+    """
+    cube_grid = sphere_grid_from_cube(dimension, num_points_in_edge)
+    cube_grid = cube_grid @ random_rotation_via_exp(dimension)
+    return np.unique(cube_grid / np.linalg.norm(cube_grid, axis=1)[:, np.newaxis], axis=0)
 
 
 def read_tests_simplex_in_ball(path: str) -> tp.Tuple[tp.Callable, tp.Callable]:
