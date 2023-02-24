@@ -11,7 +11,7 @@ def solve_primal(grid: np.ndarray, support_a_values: np.ndarray, support_b_value
         tp.Tuple[tp.Optional[float], tp.Optional[np.ndarray]]:
     q_0 = np.array([0] * len(grid[0]) + [1])
     a_ub = np.hstack((grid, support_b_values.reshape((len(grid), 1))))
-    result = linprog(q_0, A_ub=-a_ub, b_ub=-support_a_values, bounds=(None, None))
+    result = linprog(q_0, A_ub=-a_ub, b_ub=-support_a_values, bounds=(None, None), options={'disp': False})
     return result.x[-1], result.x[:-1]
 
 
@@ -146,14 +146,13 @@ def spherical_cap_grid_uniform_coordinates(center: np.ndarray, radius: float, gr
     return grid.T
 
 
-def sphere_grid_from_cube(dimension: int, grid_size: int) -> np.ndarray:
+def sphere_grid_from_cube(dimension: int, num_points_in_edge: int) -> np.ndarray:
     """
     :param dimension:
-    :param grid_size:
-    :return: a grid with about grid_size gridpoints on a unit sphere
+    :param num_points_in_edge:
+    :return: a grid with (2 * dimension * num_points_in_edge ** (dimension - 1)) gridpoints on a unit sphere
                 obtained via normalization of a grid on a surface of a cube
     """
-    num_points_in_edge = int(np.power(grid_size / 2 / dimension, 1 / (dimension - 1)))
 
     grids_of_cube_faces = []
     for i in range(dimension):
@@ -170,35 +169,36 @@ def sphere_grid_from_cube(dimension: int, grid_size: int) -> np.ndarray:
     return np.unique(cube_grid / np.linalg.norm(cube_grid, axis=1)[:, np.newaxis], axis=0)
 
 
-def ball_grid_from_cube(dimension: int, grid_size: int) -> np.ndarray:
+def ball_grid_from_cube(dimension: int, num_points_in_edge: int) -> np.ndarray:
     """
         :param dimension:
-        :param grid_size:
-        :return: a grid with about grid_size gridpoints in a unit ball
+        :param num_points_in_edge:
+        :return: a grid with (num_points_in_edge ** dimension) gridpoints in a unit ball
                     obtained via normalization of a grid in a cube
         """
-    num_points_in_edge = int(np.power(grid_size, 1 / dimension))
-    if num_points_in_edge % 2 == 1:  # if num_points_in_edge was odd, there will be unnormalizable zero gridpoint
-        num_points_in_edge += 1
 
     linspaces = [np.linspace(- 1, 1, num_points_in_edge) for _ in range(dimension)]
     coordinate_grids = np.meshgrid(*linspaces)
     grid_in_cube = np.vstack([coordinates.flatten() for coordinates in coordinate_grids]).T
 
+    if len(grid_in_cube) % 2 == 1:  # if there is (0, ..., 0) point which is not normalizeable
+        tol = 1e-12
+        grid_in_cube[len(grid_in_cube) // 2][0] += tol
+
     return grid_in_cube / np.linalg.norm(grid_in_cube, axis=1)[:, np.newaxis] * \
         np.linalg.norm(grid_in_cube, axis=1, ord=np.inf)[:, np.newaxis]
 
 
-def spherical_cap_grid_from_cube(center: np.ndarray, radius: float, grid_size: int) -> np.ndarray:
+def spherical_cap_grid_from_cube(center: np.ndarray, radius: float, num_points_in_edge: int) -> np.ndarray:
     """
     :param center: center of the spherical cap
     :param radius: radius of the spherical cap (in radians), should be small
-    :param grid_size: the number of the gridpoints
-    :return: a grid on the spherical cap, spherical coordinates on the cap as a dim-1 - dimensional ball are uniform
+    :param num_points_in_edge: the number of the gridpoints in the diameter of the cap
+    :return: a grid on the spherical cap, via creating a grid in a (dimension - 1)-dimensional cube
     """
     dim = len(center)
     rotation = rotation_to_point(center)
-    unrotated_grid = ball_grid_from_cube(dim - 1, grid_size)
+    unrotated_grid = ball_grid_from_cube(dim - 1, num_points_in_edge)
     first_column = np.ones(len(unrotated_grid))
     grid = rotation @ np.vstack((first_column, unrotated_grid.T * radius))
     grid = (grid / np.linalg.norm(grid, axis=0)).T
@@ -236,9 +236,11 @@ def run_random_test(solver: tp.Type, dimension: int, solver_kwargs: tp.Dict[str,
     file = random.choice(os.listdir(path_to_tests))
     support_a, support_b = test_reader_function(f'{path_to_tests}/{file}')
     solver_instance = solver(dimension, support_a, support_b, **solver_kwargs)
+
     start_time = time.time()
     solver_instance.solve()
     end_time = time.time()
+
     if not silent:
         print(f'test \t{file}\t time \t{end_time - start_time}\t t_error \t{abs(1. - solver_instance.t)}')
     return end_time - start_time, abs(1. - solver_instance.t)
