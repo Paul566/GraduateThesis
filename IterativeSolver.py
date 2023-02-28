@@ -38,7 +38,7 @@ class IterativeSolver:
         :param grid: current grid
         :param support_a_values:
         :param support_b_values:
-        :return: returns (dimension * (dimension + 1)) grid elements with least (<p, x> + supp(p, B) = supp(p, A))
+        :return: returns (dimension * (dimension + 1)) grid elements with least (<p, x> + supp(p, B) - supp(p, A))
         """
         differences = grid @ self.x + self.t * support_b_values - support_a_values
         size_of_output = self.dimension * (self.dimension + 1)
