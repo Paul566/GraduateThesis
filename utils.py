@@ -231,6 +231,21 @@ def sphere_grid_from_cube_with_random_rotation(dimension: int, num_points_in_edg
     return np.unique(cube_grid / np.linalg.norm(cube_grid, axis=1)[:, np.newaxis], axis=0)
 
 
+def spherical_cap_crosslike_grid(center: np.ndarray, cross_radius: float) -> np.ndarray:
+    """
+    :param dimension:
+    :param cross_radius:
+    :return: a randomly rotated cross-like grid on a spherical cap with (2 * dimension + 1) gridpoints
+    """
+    dim = len(center)
+    rotation = rotation_to_point(center)
+    unrotated_grid = np.vstack((np.identity(dim - 1), - np.identity(dim - 1), np.zeros(dim - 1))) @ \
+                     random_rotation_via_exp(dim - 1)
+    first_column = np.ones(len(unrotated_grid))
+    grid = rotation @ np.vstack((first_column, unrotated_grid.T * cross_radius))
+    return (grid / np.linalg.norm(grid, axis=0)).T
+
+
 def read_tests_simplex_in_ball(path: str) -> tp.Tuple[tp.Callable, tp.Callable]:
     vertices = np.genfromtxt(path, delimiter=',')
     support_a = lambda grid: np.max(vertices @ grid.T, axis=0)
