@@ -5,7 +5,7 @@ from utils import random_spherical_grid, spherical_cap_crosslike_grid, solve_pri
 
 class GreedySolver:
     def __init__(self, dimension: int, support_a: tp.Callable, support_b: tp.Callable,
-                 num_iterations: int = 1000, final_cross_radius = 1e-8) -> None:
+                 num_iterations: int = 1000, final_cross_radius = 1e-8, tolerance = 1e-12) -> None:
         self.support_a = support_a
         self.support_b = support_b
         self.dimension = dimension
@@ -38,7 +38,7 @@ class GreedySolver:
         :return: returns (dimension * (dimension + 1)) grid elements with least (<p, x> + supp(p, B) = supp(p, A))
         """
         differences = grid @ self.x + self.t * support_b_values - support_a_values
-        size_of_output = self.dimension + 1
+        size_of_output = (self.dimension + 1) * self.dimension
         indices = np.argpartition(differences, size_of_output)[:size_of_output]
         return grid[indices]
 
