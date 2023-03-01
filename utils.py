@@ -233,7 +233,7 @@ def sphere_grid_from_cube_with_random_rotation(dimension: int, num_points_in_edg
 
 def spherical_cap_crosslike_grid(center: np.ndarray, cross_radius: float) -> np.ndarray:
     """
-    :param dimension:
+    :param center:
     :param cross_radius:
     :return: a randomly rotated cross-like grid on a spherical cap with (2 * dimension + 1) gridpoints
     """
@@ -246,11 +246,22 @@ def spherical_cap_crosslike_grid(center: np.ndarray, cross_radius: float) -> np.
     return (grid / np.linalg.norm(grid, axis=0)).T
 
 
-def read_tests_simplex_in_ball(path: str) -> tp.Tuple[tp.Callable, tp.Callable]:
-    vertices = np.genfromtxt(path, delimiter=',')
-    support_a = lambda grid: np.max(vertices @ grid.T, axis=0)
-    support_b = lambda grid: np.ones(len(grid))
-    return support_a, support_b
+def read_tests_simplex_in_ball(path: str, dim: int) -> tp.Tuple[tp.Callable, tp.Callable, float]:
+    with open(path) as f:
+        list_vertices = []
+        f.readline()
+        delta = float(f.readline())
+        for _ in range(dim + 1):
+            line = f.readline()
+            vertex = []
+            for coordinate in line.split(','):
+                vertex.append(float(coordinate))
+            list_vertices.append(np.array(vertex))
+        vertices = np.vstack(list_vertices)
+
+        support_a = lambda grid: np.max(vertices @ grid.T, axis=0)
+        support_b = lambda grid: np.ones(len(grid))
+        return support_a, support_b, delta
 
 
 def run_tests(solver: tp.Type, dimension: int, solver_kwargs: tp.Dict[str, tp.Any], test_reader_function: tp.Callable,
@@ -258,7 +269,7 @@ def run_tests(solver: tp.Type, dimension: int, solver_kwargs: tp.Dict[str, tp.An
     times = []
     t_accuracies = []
     for file in os.listdir(path_to_tests):
-        support_a, support_b = test_reader_function(f'{path_to_tests}/{file}')
+        support_a, support_b, delta = test_reader_function(f'{path_to_tests}/{file}')
         solver_instance = solver(dimension, support_a, support_b, **solver_kwargs)
         start_time = time.time()
         solver_instance.solve()
@@ -274,7 +285,7 @@ def run_tests(solver: tp.Type, dimension: int, solver_kwargs: tp.Dict[str, tp.An
 def run_random_test(solver: tp.Type, dimension: int, solver_kwargs: tp.Dict[str, tp.Any], test_reader_function: tp.Callable,
               path_to_tests: str, silent: bool=False) -> tp.Tuple[float, float]:
     file = random.choice(os.listdir(path_to_tests))
-    support_a, support_b = test_reader_function(f'{path_to_tests}/{file}')
+    support_a, support_b, delta = test_reader_function(f'{path_to_tests}/{file}')
     solver_instance = solver(dimension, support_a, support_b, **solver_kwargs)
 
     start_time = time.time()
