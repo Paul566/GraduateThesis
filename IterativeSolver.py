@@ -12,7 +12,7 @@ class IterativeSolver:
         self.cap_grid_diameter = cap_grid_diameter
         self.x: np.ndarray | None = None
         self.t: float | None = None
-        self.best_t: np.ndarray | None = None
+        self.best_t: float | None = None
         self.best_x: np.ndarray | None = None
         self.tolerance = tolerance
         self.number_restarts = number_restarts

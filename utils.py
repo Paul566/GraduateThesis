@@ -5,7 +5,8 @@ import scipy
 import numpy as np
 import typing as tp
 from scipy.optimize import linprog
-from scipy.linalg import expm
+from scipy.spatial.transform import Rotation as Rotation
+from scipy.stats import special_ortho_group
 
 
 def solve_primal(grid: np.ndarray, support_a_values: np.ndarray, support_b_values: np.ndarray) -> \
@@ -207,18 +208,6 @@ def spherical_cap_grid_from_cube(center: np.ndarray, radius: float, num_points_i
     return grid
 
 
-def random_rotation_via_exp(dimension: int, upper_bound: float = 10) -> np.ndarray:
-    """
-    :param dimension:
-    :param upper_bound:
-    :return: generates a random antisymmetric matrix with coefficients between -upper_bound and upper_bound
-    and returns its matrix exponent
-    """
-    random_matrix = np.random.rand(dimension, dimension)
-    antisymmetric_matrix = (random_matrix - random_matrix.T) * upper_bound
-    return expm(antisymmetric_matrix)
-
-
 def sphere_grid_from_cube_with_random_rotation(dimension: int, num_points_in_edge: int) -> np.ndarray:
     """
     :param dimension:
@@ -227,22 +216,31 @@ def sphere_grid_from_cube_with_random_rotation(dimension: int, num_points_in_edg
     on a unit sphere obtained via normalization of a grid on a surface of a cube
     """
     cube_grid = sphere_grid_from_cube(dimension, num_points_in_edge)
-    cube_grid = cube_grid @ random_rotation_via_exp(dimension)
+    cube_grid = cube_grid @ special_ortho_group.rvs(dim=dimension)
     return np.unique(cube_grid / np.linalg.norm(cube_grid, axis=1)[:, np.newaxis], axis=0)
 
 
-def spherical_cap_crosslike_grid(center: np.ndarray, cross_radius: float) -> np.ndarray:
+def spherical_cap_crosslike_grid(center: np.ndarray, cross_radius: float,
+                                 random_rotation_pool: np.ndarray) -> np.ndarray:
     """
+    :param random_rotation_pool: a collection of random rotations to choose from
     :param center:
     :param cross_radius:
     :return: a randomly rotated cross-like grid on a spherical cap with (2 * dimension + 1) gridpoints
     """
     dim = len(center)
-    rotation = rotation_to_point(center)
     unrotated_grid = np.vstack((np.identity(dim - 1), - np.identity(dim - 1), np.zeros(dim - 1))) @ \
-                     random_rotation_via_exp(dim - 1)
+                     random_rotation_pool[np.random.randint(random_rotation_pool.shape[0]), :]
     first_column = np.ones(len(unrotated_grid))
-    grid = rotation @ np.vstack((first_column, unrotated_grid.T * cross_radius))
+    unrotated_grid = np.vstack((first_column, unrotated_grid.T * cross_radius))
+    e1 = np.hstack((np.array([1]), np.zeros(dim - 1)))  # the first basis vector
+
+    normal = center - e1
+    if np.linalg.norm(normal) == 0:
+        return (unrotated_grid / np.linalg.norm(unrotated_grid, axis=0)).T
+    normal /= np.linalg.norm(normal)
+
+    grid = unrotated_grid - 2 * np.outer(normal, (normal @ unrotated_grid))
     return (grid / np.linalg.norm(grid, axis=0)).T
 
 

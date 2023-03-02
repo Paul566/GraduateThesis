@@ -2,12 +2,14 @@ import numpy as np
 import typing as tp
 from utils import random_spherical_grid, spherical_cap_crosslike_grid, solve_primal
 from sklearn.cluster import KMeans
+from scipy.stats import special_ortho_group
 
 
 class GreedySolver:
     def __init__(self, dimension: int, support_a: tp.Callable, support_b: tp.Callable,
                  num_iterations: int = 1000, final_cross_radius = 1e-8, tolerance = 1e-12,
-                 grid_size_max_inflation: int = 2, max_number_restarts: int = 30) -> None:
+                 grid_size_max_inflation: int = 2, max_number_restarts: int = 30,
+                 random_rotation_pool_size = 100) -> None:
         self.support_a = support_a
         self.support_b = support_b
         self.dimension = dimension
@@ -20,6 +22,11 @@ class GreedySolver:
         self.tolerance = tolerance
         self.grid_size_max_inflation = grid_size_max_inflation
         self.current_try = 0
+        self.max_number_restarts = max_number_restarts
+        if dimension == 2:
+            self.random_dim_minus_one_rotation_pool = np.array([[1]])
+        else:
+            self.random_dim_minus_one_rotation_pool = special_ortho_group.rvs(dim=dimension - 1, size=random_rotation_pool_size)
 
     def extract_new_based_vectors(self, grid: np.ndarray, support_a_values: np.ndarray, support_b_values: np.ndarray,
                                   current_based_vectors: np.ndarray) -> np.ndarray:
@@ -62,7 +69,7 @@ class GreedySolver:
         return grid[indices]
 
     def next_based_vectors_heuristic(self, grid: np.ndarray, support_a_values: np.ndarray, support_b_values: np.ndarray,
-                                  current_based_vectors: np.ndarray, cross_radius: float) -> np.ndarray:
+                                  current_based_vectors: np.ndarray) -> np.ndarray:
         candidate_vectors = np.unique(
                 np.vstack(
                 (self.extract_new_based_vectors(grid, support_a_values, support_b_values, current_based_vectors),
@@ -81,7 +88,8 @@ class GreedySolver:
         for iteration in range(self.num_iterations):
             cross_radius = np.pi / 2 * np.power(2 / np.pi * self.final_cross_radius, iteration / self.num_iterations)
 
-            grid = np.vstack([spherical_cap_crosslike_grid(p, cross_radius) for p in based_vectors])
+            grid = np.vstack([spherical_cap_crosslike_grid(p, cross_radius, self.random_dim_minus_one_rotation_pool)
+                              for p in based_vectors])
             support_a_values = self.support_a(grid)
             support_b_values = self.support_b(grid)
 
@@ -100,7 +108,7 @@ class GreedySolver:
                 return
 
             if inflatable_grid:
-                based_vectors = self.next_based_vectors_heuristic(grid, support_a_values, support_b_values, based_vectors, cross_radius)
+                based_vectors = self.next_based_vectors_heuristic(grid, support_a_values, support_b_values, based_vectors)
             else:
                 based_vectors = self.extract_new_based_vectors(grid, support_a_values, support_b_values, based_vectors)
 
@@ -111,9 +119,4 @@ class GreedySolver:
 
     def solve(self) -> None:
         self.inner_solve()
-        #best_x, best_t = self.x, self.t
-        #for _ in range(self.number_restarts - 1):
-        #    self.inner_solve()
-        #    if self.t - self.tolerance < best_t < self.t + self.tolerance: # we probably hit the optimum two times
-        #        break
         self.x, self.t = self.best_x, self.best_t
