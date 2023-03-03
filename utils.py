@@ -262,6 +262,61 @@ def read_tests_simplex_in_ball(path: str, dim: int) -> tp.Tuple[tp.Callable, tp.
         return support_a, support_b, delta
 
 
+def read_tests_simplex_plus_ball_in_ball(path: str, dim: int) -> tp.Tuple[tp.Callable, tp.Callable, float]:
+    with open(path) as f:
+        list_vertices = []
+        f.readline()
+        f.readline()
+        ball_radius = float(f.readline())
+        delta = float(f.readline())
+        for _ in range(dim + 1):
+            line = f.readline()
+            vertex = []
+            for coordinate in line.split(','):
+                vertex.append(float(coordinate))
+            list_vertices.append(np.array(vertex))
+        vertices = np.vstack(list_vertices)
+
+        support_a = lambda grid: np.max(vertices @ grid.T, axis=0) + ball_radius
+        support_b = lambda grid: np.ones(len(grid))
+        return support_a, support_b, delta
+
+
+def read_tests_degenerate_simplex_in_ball(path: str, dim: int) -> tp.Tuple[tp.Callable, tp.Callable]:
+    with open(path) as f:
+        list_vertices = []
+        f.readline()
+        for _ in range(dim):
+            line = f.readline()
+            vertex = []
+            for coordinate in line.split(','):
+                vertex.append(float(coordinate))
+            list_vertices.append(np.array(vertex))
+        vertices = np.vstack(list_vertices)
+
+        support_a = lambda grid: np.max(vertices @ grid.T, axis=0)
+        support_b = lambda grid: np.ones(len(grid))
+        return support_a, support_b
+
+
+def read_tests_polyhedron_in_ball(path: str, dim: int) -> tp.Tuple[tp.Callable, tp.Callable, float]:
+    with open(path) as f:
+        list_vertices = []
+        f.readline()
+        d = float(f.readline())  # minimal distance from a non-based vertex to the sphere
+        for _ in range(2 * (dim + 1)):
+            line = f.readline()
+            vertex = []
+            for coordinate in line.split(','):
+                vertex.append(float(coordinate))
+            list_vertices.append(np.array(vertex))
+        vertices = np.vstack(list_vertices)
+
+        support_a = lambda grid: np.max(vertices @ grid.T, axis=0)
+        support_b = lambda grid: np.ones(len(grid))
+        return support_a, support_b, d
+
+
 def run_tests(solver: tp.Type, dimension: int, solver_kwargs: tp.Dict[str, tp.Any], test_reader_function: tp.Callable,
               path_to_tests: str, silent: bool=False) -> tp.Tuple[np.ndarray, np.ndarray]:
     times = []

@@ -1,0 +1,7 @@
+# A = simplex + ball, B = unit ball, t = 1, x = 0
+# first line is the radius of the ball, second line is delta, then 3 lines with vertices of the simplex
+0.6760743858056761
+0.0468956
+-0.03611303935956938,0.32190627816087114
+-0.15605565975264132,0.2838563626032325
+0.06611294105919767,-0.3171070522011029

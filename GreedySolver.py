@@ -8,7 +8,7 @@ from scipy.stats import special_ortho_group
 class GreedySolver:
     def __init__(self, dimension: int, support_a: tp.Callable, support_b: tp.Callable,
                  num_iterations: int = 1000, final_cross_radius = 1e-8, tolerance = 1e-12,
-                 grid_size_max_inflation: int = 2, max_number_restarts: int = 30,
+                 grid_size_max_inflation: int = 2, max_number_restarts: int = 10,
                  random_rotation_pool_size = 100) -> None:
         self.support_a = support_a
         self.support_b = support_b
@@ -93,16 +93,13 @@ class GreedySolver:
             support_a_values = self.support_a(grid)
             support_b_values = self.support_b(grid)
 
-            # if iteration % 50 == 0:
-            #     print(f'iteration {iteration} \t |x| = {np.linalg.norm(self.x)} \t cross_radius = {cross_radius} \t t = {self.t}')
-
             try:
                 self.t, self.x = solve_primal(grid, support_a_values, support_b_values)
                 if self.t > self.best_t:
                     self.best_t, self.best_x = self.t, self.x
             except TypeError: # if the linpog problem is unbounded, start over, unless we are out of tries
                 self.current_try += 1
-                if self.current_try == self.num_iterations:
+                if self.current_try == self.max_number_restarts:
                     return
                 self.inner_solve()
                 return
