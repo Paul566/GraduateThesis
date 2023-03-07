@@ -262,6 +262,26 @@ def read_tests_simplex_in_ball(path: str, dim: int) -> tp.Tuple[tp.Callable, tp.
         return support_a, support_b, delta
 
 
+def read_tests_simplex_in_ball_with_argmaxes(path: str, dim: int) -> tp.Tuple[tp.Callable, tp.Callable]:
+    with open(path) as f:
+        list_vertices = []
+        f.readline()
+        f.readline()
+        for _ in range(dim + 1):
+            line = f.readline()
+            vertex = []
+            for coordinate in line.split(','):
+                vertex.append(float(coordinate))
+            list_vertices.append(np.array(vertex))
+        vertices = np.vstack(list_vertices)
+
+        support_a_with_argmax = lambda grid: (np.max(vertices @ grid.T, axis=0),
+                                              vertices[np.argmax(vertices @ grid.T, axis=0)])
+        support_b_with_argmax = lambda grid: (np.ones(len(grid)),
+                                              (grid.T / np.linalg.norm(grid, axis=1)).T)
+        return support_a_with_argmax, support_b_with_argmax
+
+
 def read_tests_simplex_plus_ball_in_ball(path: str, dim: int) -> tp.Tuple[tp.Callable, tp.Callable, float]:
     with open(path) as f:
         list_vertices = []
