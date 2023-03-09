@@ -11,9 +11,9 @@ from scipy.stats import special_ortho_group
 
 def solve_primal(grid: np.ndarray, support_a_values: np.ndarray, support_b_values: np.ndarray) -> \
         tp.Tuple[tp.Optional[float], tp.Optional[np.ndarray]]:
-    q_0 = np.array([0] * len(grid[0]) + [1])
+    q_0 = np.hstack((np.zeros(len(grid[0])), np.array([1])))
     a_ub = np.hstack((grid, support_b_values.reshape((len(grid), 1))))
-    result = linprog(q_0, A_ub=-a_ub, b_ub=-support_a_values, bounds=(None, None), options={'disp': False})
+    result = linprog(q_0, A_ub=-a_ub, b_ub=-support_a_values, bounds=(None, None))
     return result.x[-1], result.x[:-1]
 
 
@@ -300,6 +300,28 @@ def read_tests_simplex_plus_ball_in_ball(path: str, dim: int) -> tp.Tuple[tp.Cal
         support_a = lambda grid: np.max(vertices @ grid.T, axis=0) + ball_radius
         support_b = lambda grid: np.ones(len(grid))
         return support_a, support_b, delta
+
+
+def read_tests_simplex_plus_ball_in_ball_with_argmaxes(path: str, dim: int) -> tp.Tuple[tp.Callable, tp.Callable]:
+    with open(path) as f:
+        list_vertices = []
+        f.readline()
+        f.readline()
+        ball_radius = float(f.readline())
+        f.readline()
+        for _ in range(dim + 1):
+            line = f.readline()
+            vertex = []
+            for coordinate in line.split(','):
+                vertex.append(float(coordinate))
+            list_vertices.append(np.array(vertex))
+        vertices = np.vstack(list_vertices)
+
+        support_a_with_argmax = lambda grid: (np.max(vertices @ grid.T, axis=0) + ball_radius,
+            vertices[np.argmax(vertices @ grid.T, axis=0)] + ball_radius * (grid.T / np.linalg.norm(grid, axis=1)).T)
+        support_b_with_argmax = lambda grid: (np.ones(len(grid)),
+                                              (grid.T / np.linalg.norm(grid, axis=1)).T)
+        return support_a_with_argmax, support_b_with_argmax
 
 
 def read_tests_degenerate_simplex_in_ball(path: str, dim: int) -> tp.Tuple[tp.Callable, tp.Callable]:
