@@ -53,30 +53,26 @@ class GradientDescentSolver:
         return np.vstack((first_n_vertices, last_vertex))
 
     def update_grid_t_x(self) -> None:
-        delta_grid = np.infty * np.ones_like(self.grid)
-        while not np.all(np.abs(delta_grid) < self.tolerance):
-            support_a_values, support_a_argmaxes = self.support_with_argmax_a(self.grid)
-            support_b_values, support_b_argmaxes = self.support_with_argmax_b(self.grid)
-            grid_gradient = np.tile(self.x, (self.dimension + 1, 1)) + self.t * support_b_argmaxes - support_a_argmaxes
-            previous_grid = np.copy(self.grid)
-            self.grid -= self.learning_rate * grid_gradient
-            self.grid = (self.grid.T / np.linalg.norm(self.grid, axis=1)).T
-            delta_grid = self.grid - previous_grid
+        support_a_values, support_a_argmaxes = self.support_with_argmax_a(self.grid)
+        support_b_values, support_b_argmaxes = self.support_with_argmax_b(self.grid)
+        grid_gradient = np.tile(self.x, (len(self.grid), 1)) + self.t * support_b_argmaxes - support_a_argmaxes
+        self.grid -= self.learning_rate * grid_gradient
+        self.grid = (self.grid.T / np.linalg.norm(self.grid, axis=1)).T
 
         #print(f'grid (mb not feasible) \n {self.grid}')
 
-        if self.zero_inside_convex_hull(self.grid):
+        try:
             support_a_values, support_a_argmaxes = self.support_with_argmax_a(self.grid)
             support_b_values, support_b_argmaxes = self.support_with_argmax_b(self.grid)
-            self.t, self.x = self.get_t_and_x(support_a_values, support_b_values)
-            return
-
-        # in case the relaxed grid doesn't contain zero in its convex hull
-        self.grid = np.vstack((self.grid, self.regular_simplex() @ special_ortho_group.rvs(dim=self.dimension, size=1)))
-        support_a_values, support_a_argmaxes = self.support_with_argmax_a(self.grid)
-        support_b_values, support_b_argmaxes = self.support_with_argmax_b(self.grid)
-        self.t, self.x = solve_primal(self.grid, support_a_values, support_b_values)
-        self.grid = self.grid[self.get_based_gridpoints_indices(support_a_values, support_b_values)]
+            self.t, self.x = solve_primal(self.grid, support_a_values, support_b_values)
+        except TypeError:
+            # in case the relaxed grid doesn't contain zero in its convex hull
+            self.grid = np.vstack((self.grid,
+                                   self.regular_simplex() @ special_ortho_group.rvs(dim=self.dimension, size=1)))
+            support_a_values, support_a_argmaxes = self.support_with_argmax_a(self.grid)
+            support_b_values, support_b_argmaxes = self.support_with_argmax_b(self.grid)
+            self.t, self.x = solve_primal(self.grid, support_a_values, support_b_values)
+            #self.grid = self.grid[self.get_based_gridpoints_indices(support_a_values, support_b_values)]
 
     def solve(self):
         self.grid = self.regular_simplex() @ special_ortho_group.rvs(dim=self.dimension, size=1)
