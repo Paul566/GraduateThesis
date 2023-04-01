@@ -9,7 +9,7 @@ class GradientDescentSolver:
                  max_num_iterations: int = 20, learning_rate = 1,
                  max_finding_distinct_minimums_attempts_per_dimension = 10,
                  max_num_gd_iterations: int = 1000,
-                 tolerance_gd = 1e-10, tolerance_duplicates = 1e-6, max_num_restarts = 5) -> None:
+                 tolerance_gd = 1e-10, tolerance_duplicates = 1e-6, max_num_restarts = 100) -> None:
         """
         :param dimension:
         :param support_with_argmax_a: should return a tuple of arrays: (support values and argmaxes)
@@ -78,8 +78,7 @@ class GradientDescentSolver:
     def find_minimums(self) -> np.ndarray:
         """
         :return: dim+1 minimums of (x, p) + t * s(p, B) - s(p, A), if wasn't able to find dim+1 distinct minimums,
-        then complete the found minimums with some points to get a grid such that the size of the grid is n+1,
-        and zero is in the convex hull of the grid
+        then return as many as was found
         """
         minimums = self.relax_points(self.grid)
         minimums = self.omit_duplicates_in_points(minimums)
@@ -98,18 +97,12 @@ class GradientDescentSolver:
             if len(minimums) == self.dimension + 1:
                 return minimums
 
-        # if we still didn't get the n+1 minimums, add some points to the grid such that
-        # the size of the grid is n+1, and zero is in the convex hull of the grid
-        if len(minimums) < self.dimension:
-            random_points_to_add = np.random.normal(size=(self.dimension - len(minimums), self.dimension))
-            random_points_to_add = (random_points_to_add.T / np.linalg.norm(random_points_to_add, axis=1)).T
-            minimums = np.vstack((minimums, random_points_to_add))
-        final_point = np.sum(minimums, axis=0)
-        final_point = - final_point / np.linalg.norm(final_point)
-        return np.vstack((minimums, final_point))
+        return minimums
 
     def update_grid_t_x(self) -> None:
         self.grid = self.find_minimums()
+        if len(self.grid) < self.dimension + 1:
+            return
         support_a_values, support_a_argmaxes = self.support_with_argmax_a(self.grid)
         support_b_values, support_b_argmaxes = self.support_with_argmax_b(self.grid)
         self.t, self.x = self.get_t_and_x(support_a_values, support_b_values)
@@ -121,10 +114,12 @@ class GradientDescentSolver:
         self.t, self.x = self.get_t_and_x(support_a_values, support_b_values)
 
         for i in range(self.max_num_iterations):
-            #print(f'iteration {i}\t t {self.t}\t |x| {np.linalg.norm(self.x)}\t zero in co(grid): {self.zero_inside_convex_hull(self.grid)}')
+            # print(f'iteration {i}\t t {self.t}\t |x| {np.linalg.norm(self.x)}\t zero in co(grid): {self.zero_inside_convex_hull(self.grid)}')
 
             previous_t = self.t
             self.update_grid_t_x()
+            if len(self.grid) != self.dimension + 1:
+                break
 
             if np.abs(self.t - previous_t) < self.tolerance_gd:
                 if self.zero_inside_convex_hull(self.grid):
