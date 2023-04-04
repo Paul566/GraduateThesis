@@ -17,8 +17,8 @@ void GeneralSolver::Solve() {
         gridpoint1[i] = 1.;
         std::vector<double> gridpoint2(static_cast<size_t>(dimension), 0.);
         gridpoint2[i] = -1.;
-        grid_data.emplace_back(gridpoint1, test_reader_.SupportA(gridpoint1), test_reader_.SupportB(gridpoint1));
-        grid_data.emplace_back(gridpoint2, test_reader_.SupportA(gridpoint1), test_reader_.SupportB(gridpoint1));
+        grid_data.emplace(gridpoint1, test_reader_.SupportA(gridpoint1), test_reader_.SupportB(gridpoint1));
+        grid_data.emplace(gridpoint2, test_reader_.SupportA(gridpoint1), test_reader_.SupportB(gridpoint1));
     }
 
     UpdateTAndX();
