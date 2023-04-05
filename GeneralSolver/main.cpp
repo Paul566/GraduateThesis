@@ -26,7 +26,7 @@ int main () {
                 std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_begin).count()) / 1000000.;
 
         test_results << std::setprecision(12) << time_in_seconds << "," << std::abs(solver_instance.t - 1.) << "\n";
-        std::cout << std::setprecision(12) << time_in_seconds << "," << std::abs(solver_instance.t - 1.) << "\n";
+        std::cout << std::setprecision(12) << test_file << "\t" << time_in_seconds << "\t" << std::abs(solver_instance.t - 1.) << "\n";
     }
 
     test_results.close();
