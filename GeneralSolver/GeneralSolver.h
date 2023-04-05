@@ -35,10 +35,15 @@ class GeneralSolver {
 private:
     TestReader& test_reader_;
     double dimension;
-    Face root;
+    std::shared_ptr<Face> root;
 
     void UpdateTAndX();
-    void get_grid(const Face& vertex, std::unordered_set<std::tuple<std::vector<double>, double, double>, gridpoint_hash>& grid_data);
+    void GetGrid(const std::shared_ptr<Face>& face, std::unordered_set<std::tuple<std::vector<double>, double, double>, gridpoint_hash>& grid_data);
+    void SubdivideFace(const std::shared_ptr<Face>& face);
+    [[nodiscard]] std::vector<double> SphericalBarycenter(const std::vector<std::vector<double>>& vertices) const;
+    static std::vector<double> Normalize(std::vector<double> x);
+    std::vector<std::vector<std::vector<double>>> SubdivideSphericalSimplex(std::vector<std::vector<double>> simplex);
+    void SubdivideSuspiciousFaces(const std::shared_ptr<Face>& face);
 
 public:
     double t;

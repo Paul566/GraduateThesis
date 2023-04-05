@@ -1,5 +1,5 @@
+#include <memory>
 #include <tuple>
-#include <utility>
 #include <vector>
 #include "GeneralSolver.h"
 #include "or-tools_x86_64_Ubuntu-20.04_cpp_v9.6.2534/include/ortools/linear_solver/linear_solver.h"
@@ -23,8 +23,8 @@ GeneralSolver::GeneralSolver(const TestReader &test_reader, int dimension_)
         minus_identity.emplace_back(p2, test_reader_.SupportA(p2), test_reader_.SupportB(p2));
     }
 
-    root = Face();
-    root.is_root = true;
+    root = std::make_shared<Face>();
+    root->is_root = true;
     for (int i = 0; i < pow(2, dimension); ++i) {
         std::shared_ptr<Face> face(new Face());
         for (int j = 0; j < dimension; ++j) {
@@ -34,19 +34,19 @@ GeneralSolver::GeneralSolver(const TestReader &test_reader, int dimension_)
                 face->gridpoints.push_back(minus_identity[j]);
             }
         }
-        root.children.push_back(face);
+        root->children.push_back(face);
     }
-
 }
 
 void GeneralSolver::Solve() {
-
+    SubdivideSuspiciousFaces(root);
+    SubdivideSuspiciousFaces(root);
     UpdateTAndX();
 }
 
 void GeneralSolver::UpdateTAndX() {
     std::unordered_set<std::tuple<std::vector<double>, double, double>, gridpoint_hash> grid_data;
-    get_grid(root, grid_data); // unordered_set of tuples (p, suppA, suppB)
+    GetGrid(root, grid_data); // unordered_set of tuples (p, suppA, suppB)
 
     std::unique_ptr<operations_research::MPSolver> solver(operations_research::MPSolver::CreateSolver("GLOP"));
 
@@ -77,14 +77,99 @@ void GeneralSolver::UpdateTAndX() {
         this->x[i] = x_to_optimize[i]->solution_value();
 }
 
-void GeneralSolver::get_grid(const GeneralSolver::Face& vertex,
-                             std::unordered_set<std::tuple<std::vector<double>, double, double>, gridpoint_hash>& grid_data) {
-    for (const auto& gridpoint : vertex.gridpoints) {
-        grid_data.insert(gridpoint);
+void GeneralSolver::GetGrid(const std::shared_ptr<Face>& face,
+                            std::unordered_set<std::tuple<std::vector<double>, double, double>, gridpoint_hash>& grid_data) {
+    if (face->children.empty()) {
+        for (const auto &gridpoint: face->gridpoints) {
+            grid_data.insert(gridpoint);
+        }
+    } else {
+        for (const auto &child: face->children) {
+            GetGrid(child, grid_data);
+        }
+    }
+}
+
+void GeneralSolver::SubdivideFace(const std::shared_ptr<Face>& face) {
+    std::vector<std::vector<double>> current_simplex;
+    for (auto gridpoint : face->gridpoints) {
+        current_simplex.push_back(std::get<0>(gridpoint));
+    }
+    auto new_simplices = SubdivideSphericalSimplex(current_simplex);
+
+    for (const auto& simplex : new_simplices) {
+        std::shared_ptr<Face> child_face(new Face());
+        for (const std::vector<double>& vertex : simplex) {
+            child_face->gridpoints.emplace_back(vertex, test_reader_.SupportA(vertex), test_reader_.SupportB(vertex));
+        }
+        face->children.push_back(child_face);
+    }
+}
+
+std::vector<double> GeneralSolver::SphericalBarycenter(const std::vector<std::vector<double>>& vertices) const {
+    std::vector<double> ans(static_cast<size_t>(dimension), 0.);
+    for (auto vertex : vertices) {
+        for (int i = 0; i < dimension; ++i) {
+            ans[i] += vertex[i];
+        }
+    }
+    return Normalize(ans);
+}
+
+std::vector<double> GeneralSolver::Normalize(std::vector<double> x) {
+    double norm = 0;
+    for (double coordinate : x)
+        norm += coordinate * coordinate;
+    norm = sqrt(norm);
+
+    std::vector<double> ans(x.size());
+    for (int i = 0; i < x.size(); ++i) {
+        ans[i] = x[i] / norm;
     }
 
-    for (const auto child : vertex.children) {
-        get_grid(*child, grid_data);
+    return ans;
+}
+
+std::vector<std::vector<std::vector<double>>>
+GeneralSolver::SubdivideSphericalSimplex(std::vector<std::vector<double>> simplex) {
+    std::vector<double> barycenter = SphericalBarycenter(simplex);
+    std::vector<std::vector<std::vector<double>>> ans;
+    if (simplex.size() == 2) {
+        std::vector<std::vector<double>> subsimplex1;
+        std::vector<std::vector<double>> subsimplex2;
+        subsimplex1.push_back(simplex[0]);
+        subsimplex1.push_back(barycenter);
+        subsimplex2.push_back(simplex[1]);
+        subsimplex2.push_back(barycenter);
+        ans.push_back(subsimplex1);
+        ans.push_back(subsimplex2);
+        return ans;
+    }
+
+    for (int i = 0; i < simplex.size(); ++i) {
+        std::vector<std::vector<double>> subsimplex;
+        for (int j = 0; j < simplex.size(); ++j) {
+            if (j != i) {
+                subsimplex.push_back(simplex[j]);
+            }
+        }
+        auto subsimplex_subdivision = SubdivideSphericalSimplex(subsimplex);
+        for (auto subface : subsimplex_subdivision) {
+            subface.push_back(barycenter);
+            ans.push_back(subface);
+        }
+    }
+
+    return ans;
+}
+
+void GeneralSolver::SubdivideSuspiciousFaces(const std::shared_ptr<Face>& face) {
+    if ((face->is_root) || (!face->children.empty())) {
+        for (const auto& child : face->children) {
+            SubdivideSuspiciousFaces(child);
+        }
+    } else {
+        SubdivideFace(face);
     }
 }
 
