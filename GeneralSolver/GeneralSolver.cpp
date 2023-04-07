@@ -4,11 +4,13 @@
 #include "GeneralSolver.h"
 #include "or-tools_x86_64_Ubuntu-20.04_cpp_v9.6.2534/include/ortools/linear_solver/linear_solver.h"
 
-GeneralSolver::GeneralSolver(const TestReader &test_reader, int dimension_)
+GeneralSolver::GeneralSolver(const TestReader &test_reader, int dimension_, int max_iterations_)
         : test_reader_(const_cast<TestReader &>(test_reader)) {
     dimension = dimension_;
+    max_iterations = max_iterations_;
     t = 0.;
     x = std::vector<double> (static_cast<size_t>(dimension), 0.);
+    delta = sqrt(2.);
 
     std::vector<std::tuple<std::vector<double>, double, double>> plus_identity;
     std::vector<std::tuple<std::vector<double>, double, double>> minus_identity;
@@ -39,9 +41,12 @@ GeneralSolver::GeneralSolver(const TestReader &test_reader, int dimension_)
 }
 
 void GeneralSolver::Solve() {
-    SubdivideSuspiciousFaces(root);
-    SubdivideSuspiciousFaces(root);
-    UpdateTAndX();
+    for (int i = 0; i < max_iterations; ++i) {
+        std::cout << "delta " << delta << "\n";
+        SubdivideSuspiciousFaces(root);
+        UpdateTAndX();
+    }
+    std::cout << "delta " << delta << "\n";
 }
 
 void GeneralSolver::UpdateTAndX() {
@@ -90,12 +95,18 @@ void GeneralSolver::GetGrid(const std::shared_ptr<Face>& face,
     }
 }
 
-void GeneralSolver::SubdivideFace(const std::shared_ptr<Face>& face) {
+double GeneralSolver::SubdivideFace(const std::shared_ptr<Face>& face) {
+    // returns max length of the edges int the subdivision
+
     std::vector<std::vector<double>> current_simplex;
+    double ans = 0.;
+
     for (auto gridpoint : face->gridpoints) {
         current_simplex.push_back(std::get<0>(gridpoint));
     }
-    auto new_simplices = SubdivideSphericalSimplex(current_simplex);
+
+    auto subdivision_result = SubdivideSphericalSimplex(current_simplex);
+    auto new_simplices = subdivision_result.second;
 
     for (const auto& simplex : new_simplices) {
         std::shared_ptr<Face> child_face(new Face());
@@ -104,6 +115,8 @@ void GeneralSolver::SubdivideFace(const std::shared_ptr<Face>& face) {
         }
         face->children.push_back(child_face);
     }
+
+    return subdivision_result.first;
 }
 
 std::vector<double> GeneralSolver::SphericalBarycenter(const std::vector<std::vector<double>>& vertices) const {
@@ -116,22 +129,24 @@ std::vector<double> GeneralSolver::SphericalBarycenter(const std::vector<std::ve
     return Normalize(ans);
 }
 
-std::vector<double> GeneralSolver::Normalize(std::vector<double> x) {
+std::vector<double> GeneralSolver::Normalize(std::vector<double> vec) {
     double norm = 0;
-    for (double coordinate : x)
+    for (double coordinate : vec)
         norm += coordinate * coordinate;
     norm = sqrt(norm);
 
-    std::vector<double> ans(x.size());
-    for (int i = 0; i < x.size(); ++i) {
-        ans[i] = x[i] / norm;
+    std::vector<double> ans(vec.size());
+    for (int i = 0; i < vec.size(); ++i) {
+        ans[i] = vec[i] / norm;
     }
 
     return ans;
 }
 
-std::vector<std::vector<std::vector<double>>>
+std::pair<double, std::vector<std::vector<std::vector<double>>>>
 GeneralSolver::SubdivideSphericalSimplex(std::vector<std::vector<double>> simplex) {
+    // returns a pair (max diameter of the simplex in the subdivision, simplices of subdivision)
+
     std::vector<double> barycenter = SphericalBarycenter(simplex);
     std::vector<std::vector<std::vector<double>>> ans;
     if (simplex.size() == 2) {
@@ -143,9 +158,10 @@ GeneralSolver::SubdivideSphericalSimplex(std::vector<std::vector<double>> simple
         subsimplex2.push_back(barycenter);
         ans.push_back(subsimplex1);
         ans.push_back(subsimplex2);
-        return ans;
+        return {dist(barycenter, simplex[0]), ans};
     }
 
+    double max_diameter = 0.;
     for (int i = 0; i < simplex.size(); ++i) {
         std::vector<std::vector<double>> subsimplex;
         for (int j = 0; j < simplex.size(); ++j) {
@@ -153,24 +169,48 @@ GeneralSolver::SubdivideSphericalSimplex(std::vector<std::vector<double>> simple
                 subsimplex.push_back(simplex[j]);
             }
         }
-        auto subsimplex_subdivision = SubdivideSphericalSimplex(subsimplex);
+
+        auto subresult = SubdivideSphericalSimplex(subsimplex);
+        auto subsimplex_subdivision = subresult.second;
+        if (subresult.first > max_diameter)
+            max_diameter = subresult.first;
+
         for (auto subface : subsimplex_subdivision) {
             subface.push_back(barycenter);
             ans.push_back(subface);
+            for (const auto& vertex : subface) {
+                double diameter_candidate = dist(vertex, barycenter);
+                if (diameter_candidate > max_diameter)
+                    max_diameter = diameter_candidate;
+            }
         }
     }
 
-    return ans;
+    return {max_diameter, ans};
 }
 
 void GeneralSolver::SubdivideSuspiciousFaces(const std::shared_ptr<Face>& face) {
+    // also updates delta
+
+    if (face->is_root) // happens one time at the beginning of dfs
+        delta = 0;
+
     if ((face->is_root) || (!face->children.empty())) {
         for (const auto& child : face->children) {
             SubdivideSuspiciousFaces(child);
         }
     } else {
-        SubdivideFace(face);
+        double candidate_delta = SubdivideFace(face);
+        if (candidate_delta > delta)
+            delta = candidate_delta;
     }
+}
+
+double GeneralSolver::dist(std::vector<double> vec1, std::vector<double> vec2) {
+    double ans = 0.;
+    for (int i = 0; i < vec1.size(); ++i)
+        ans += (vec1[i] - vec2[i]) * (vec1[i] - vec2[i]);
+    return sqrt(ans);
 }
 
 GeneralSolver::Face::Face() {
