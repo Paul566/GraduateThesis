@@ -12,10 +12,10 @@
 class GeneralSolver {
     struct gridpoint_hash
     {
-        size_t operator()(const std::tuple<std::vector<double>, double, double>& gridpoint) const {
+        size_t operator()(const std::shared_ptr<std::tuple<std::vector<double>, double, double>>& gridpoint) const {
             std::hash<double> double_hasher;
             size_t answer = 0;
-            for (double coordinate : std::get<0>(gridpoint)) {
+            for (double coordinate : std::get<0>(*gridpoint)) {
                 answer ^= double_hasher(coordinate) + 0x9e3779b9 + (answer << 6) + (answer >> 2);
             }
             return answer;
@@ -26,7 +26,7 @@ class GeneralSolver {
         Face();
         ~Face();
 
-        std::vector<std::tuple<std::vector<double>, double, double>> gridpoints;
+        std::vector<std::shared_ptr<std::tuple<std::vector<double>, double, double>>> gridpoints;
         std::vector<std::shared_ptr<Face>> children;
         bool is_suspicious;
         bool is_root;
@@ -39,25 +39,30 @@ private:
     int max_iterations;
     // delta is the length of the longest edge of the leaf simplex from the triangulation,
     // it bounds the fineness of the grid from above
+    bool b_is_unit_ball;
     double delta;
+    double h_b_b_hat; // Hausdorff distance between B and its approximation
 
     void UpdateTAndX();
 
-    void GetGrid(const std::shared_ptr<Face>& face, std::unordered_set<std::tuple<std::vector<double>, double, double>, gridpoint_hash>& grid_data);
-
     double SubdivideFace(const std::shared_ptr<Face>& face);
     [[nodiscard]] std::vector<double> SphericalBarycenter(const std::vector<std::vector<double>>& vertices) const;
+    // SubdivideSphericalSimplex also adds the new vertices to grid_data
     std::pair<double, std::vector<std::vector<std::vector<double>>>> SubdivideSphericalSimplex(std::vector<std::vector<double>> simplex);
     void SubdivideSuspiciousFaces(const std::shared_ptr<Face>& face);
 
     static std::vector<double> Normalize(std::vector<double> vec);
     static double dist(std::vector<double> vec1, std::vector<double> vec2);
+
+    void UpdateHBBHat();
+
     std::vector<std::vector<double>> ExtractBasedVectors();
 
 public:
     double t;
     std::vector<double> x;
-    GeneralSolver(const TestReader &test_reader, int dimension_, int max_iterations_=5);
+    std::unordered_set<std::shared_ptr<std::tuple<std::vector<double>, double, double>>, gridpoint_hash> grid_data;
+    GeneralSolver(const TestReader &test_reader, int dimension_, int max_iterations_=5, bool b_is_unit_ball_=false);
     void Solve();
 };
 
