@@ -5,14 +5,17 @@
 #include "GeneralSolver.h"
 #include "or-tools_x86_64_Ubuntu-20.04_cpp_v9.6.2534/include/ortools/linear_solver/linear_solver.h"
 
-GeneralSolver::GeneralSolver(const TestReader &test_reader, int dimension_, int max_iterations_, bool b_is_unit_ball_)
+GeneralSolver::GeneralSolver(const TestReader &test_reader, int dimension_, int max_iterations_, bool b_is_unit_ball_,
+                             bool b_is_smooth_)
         : test_reader_(const_cast<TestReader &>(test_reader)) {
     dimension = dimension_;
     max_iterations = max_iterations_;
     t = 0.;
-    x = std::vector<double> (static_cast<size_t>(dimension), 0.);
+    x = std::vector<double>(static_cast<size_t>(dimension), 0.);
     delta = sqrt(2.);
     b_is_unit_ball = b_is_unit_ball_;
+    b_is_smooth = b_is_smooth_;
+    h_b_b_hat = INFINITY;
 
     std::vector<std::shared_ptr<std::tuple<std::vector<double>, double, double>>> plus_identity;
     std::vector<std::shared_ptr<std::tuple<std::vector<double>, double, double>>> minus_identity;
@@ -23,8 +26,10 @@ GeneralSolver::GeneralSolver(const TestReader &test_reader, int dimension_, int 
         p1[i] = 1.;
         p2[i] = -1.;
 
-        auto gridpoint1_tuple = std::tuple<std::vector<double>, double, double>({p1, test_reader_.SupportA(p1), test_reader_.SupportB(p1)});
-        auto gridpoint2_tuple = std::tuple<std::vector<double>, double, double>({p2, test_reader_.SupportA(p2), test_reader_.SupportB(p2)});
+        auto gridpoint1_tuple = std::tuple<std::vector<double>, double, double>(
+                {p1, test_reader_.SupportA(p1), test_reader_.SupportB(p1)});
+        auto gridpoint2_tuple = std::tuple<std::vector<double>, double, double>(
+                {p2, test_reader_.SupportA(p2), test_reader_.SupportB(p2)});
 
         auto gridpoint1_ptr = std::make_shared<std::tuple<std::vector<double>, double, double>>(gridpoint1_tuple);
         auto gridpoint2_ptr = std::make_shared<std::tuple<std::vector<double>, double, double>>(gridpoint2_tuple);
@@ -55,6 +60,7 @@ void GeneralSolver::Solve() {
         SubdivideSuspiciousFaces(root);
         UpdateTAndX();
         UpdateHBBHat();
+        UpdateBasedPoints();
     }
 }
 
@@ -63,14 +69,14 @@ void GeneralSolver::UpdateTAndX() {
 
     double inf = operations_research::MPSolver::infinity();
 
-    operations_research::MPVariable *const t_to_optimize = solver->MakeNumVar(- inf, inf, "t");
+    operations_research::MPVariable *const t_to_optimize = solver->MakeNumVar(-inf, inf, "t");
     std::vector<operations_research::MPVariable *> x_to_optimize;
     for (int i = 0; i < this->dimension; ++i) {
-        operations_research::MPVariable * x_i = solver->MakeNumVar(- inf, inf, "x");
+        operations_research::MPVariable *x_i = solver->MakeNumVar(-inf, inf, "x");
         x_to_optimize.push_back(x_i);
     }
 
-    for (const auto& gridpoint : grid_data) {
+    for (const auto &gridpoint: grid_data) {
         operations_research::MPConstraint *const constraint = solver->MakeRowConstraint(std::get<1>(*gridpoint), inf);
         constraint->SetCoefficient(t_to_optimize, std::get<2>(*gridpoint));
         for (int i = 0; i < this->dimension; ++i)
@@ -88,24 +94,25 @@ void GeneralSolver::UpdateTAndX() {
         this->x[i] = x_to_optimize[i]->solution_value();
 }
 
-double GeneralSolver::SubdivideFace(const std::shared_ptr<Face>& face) {
+double GeneralSolver::SubdivideFace(const std::shared_ptr<Face> &face) {
     // returns max length of the edges int the subdivision
     // also updates grid_data
 
     std::vector<std::vector<double>> current_simplex;
     double ans = 0.;
 
-    for (const auto& gridpoint : face->gridpoints) {
+    for (const auto &gridpoint: face->gridpoints) {
         current_simplex.push_back(std::get<0>(*gridpoint));
     }
 
     auto subdivision_result = SubdivideSphericalSimplex(current_simplex);
     auto new_simplices = subdivision_result.second;
 
-    for (const auto& simplex : new_simplices) {
+    for (const auto &simplex: new_simplices) {
         std::shared_ptr<Face> child_face(new Face());
-        for (const std::vector<double>& vertex : simplex) {
-            std::tuple<std::vector<double>, double, double> new_gridpoint({vertex, test_reader_.SupportA(vertex), test_reader_.SupportB(vertex)});
+        for (const std::vector<double> &vertex: simplex) {
+            std::tuple<std::vector<double>, double, double> new_gridpoint(
+                    {vertex, test_reader_.SupportA(vertex), test_reader_.SupportB(vertex)});
             auto new_gridpoint_ptr = std::make_shared<std::tuple<std::vector<double>, double, double>>(new_gridpoint);
             child_face->gridpoints.push_back(new_gridpoint_ptr);
         }
@@ -115,9 +122,9 @@ double GeneralSolver::SubdivideFace(const std::shared_ptr<Face>& face) {
     return subdivision_result.first;
 }
 
-std::vector<double> GeneralSolver::SphericalBarycenter(const std::vector<std::vector<double>>& vertices) const {
+std::vector<double> GeneralSolver::SphericalBarycenter(const std::vector<std::vector<double>> &vertices) const {
     std::vector<double> ans(static_cast<size_t>(dimension), 0.);
-    for (auto vertex : vertices) {
+    for (auto vertex: vertices) {
         for (int i = 0; i < dimension; ++i) {
             ans[i] += vertex[i];
         }
@@ -127,7 +134,7 @@ std::vector<double> GeneralSolver::SphericalBarycenter(const std::vector<std::ve
 
 std::vector<double> GeneralSolver::Normalize(std::vector<double> vec) {
     double norm = 0;
-    for (double coordinate : vec)
+    for (double coordinate: vec)
         norm += coordinate * coordinate;
     norm = sqrt(norm);
 
@@ -155,7 +162,8 @@ GeneralSolver::SubdivideSphericalSimplex(std::vector<std::vector<double>> simple
         ans.push_back(subsimplex1);
         ans.push_back(subsimplex2);
 
-        std::tuple<std::vector<double>, double, double> barycenter_tuple(barycenter, test_reader_.SupportA(barycenter), test_reader_.SupportB(barycenter));
+        std::tuple<std::vector<double>, double, double> barycenter_tuple(barycenter, test_reader_.SupportA(barycenter),
+                                                                         test_reader_.SupportB(barycenter));
         grid_data.insert(std::make_shared<std::tuple<std::vector<double>, double, double>>(barycenter_tuple));
 
         return {dist(barycenter, simplex[0]), ans};
@@ -175,10 +183,10 @@ GeneralSolver::SubdivideSphericalSimplex(std::vector<std::vector<double>> simple
         if (subresult.first > max_diameter)
             max_diameter = subresult.first;
 
-        for (auto subface : subsimplex_subdivision) {
+        for (auto subface: subsimplex_subdivision) {
             subface.push_back(barycenter);
             ans.push_back(subface);
-            for (const auto& vertex : subface) {
+            for (const auto &vertex: subface) {
                 double diameter_candidate = dist(vertex, barycenter);
                 if (diameter_candidate > max_diameter)
                     max_diameter = diameter_candidate;
@@ -189,14 +197,14 @@ GeneralSolver::SubdivideSphericalSimplex(std::vector<std::vector<double>> simple
     return {max_diameter, ans};
 }
 
-void GeneralSolver::SubdivideSuspiciousFaces(const std::shared_ptr<Face>& face) {
+void GeneralSolver::SubdivideSuspiciousFaces(const std::shared_ptr<Face> &face) {
     // also updates delta
 
     if (face->is_root) // happens one time at the beginning of dfs
         delta = 0;
 
     if ((face->is_root) || (!face->children.empty())) {
-        for (const auto& child : face->children) {
+        for (const auto &child: face->children) {
             SubdivideSuspiciousFaces(child);
         }
     } else {
@@ -217,14 +225,37 @@ void GeneralSolver::UpdateHBBHat() {
     if (b_is_unit_ball) {
         h_b_b_hat = 4 * delta * delta;
     } else {
-        //TODO
+        // TODO
         throw std::runtime_error("B is not a unit ball, this is not yet supported");
     }
 }
 
-std::vector<std::vector<double>> GeneralSolver::ExtractBasedVectors() {
-    //TODO
-    return {};
+void GeneralSolver::UpdateBasedPoints() {
+    based_points_data.clear();
+
+    for (const auto &gridpoint: grid_data) {
+        if (DotProduct(std::get<0>(*gridpoint), x) + t * std::get<2>(*gridpoint) - std::get<1>(*gridpoint) <
+            tolerance) {
+            based_points_data.emplace_back(std::get<0>(*gridpoint), DirectedErrorBound(std::get<0>(*gridpoint)));
+        }
+    }
+}
+
+double GeneralSolver::DotProduct(std::vector<double> a, std::vector<double> b) {
+    double ans = 0.;
+    for (int i = 0; i < a.size(); ++i) {
+        ans += a[i] * b[i];
+    }
+    return ans;
+}
+
+double GeneralSolver::DirectedErrorBound(const std::vector<double> &p) const {
+    if (b_is_smooth) {
+        return t * h_b_b_hat;
+    } else {
+        // TODO
+        throw std::runtime_error("the boundary of B is not smooth, this is not yet supported");
+    }
 }
 
 GeneralSolver::Face::Face() {
@@ -233,3 +264,19 @@ GeneralSolver::Face::Face() {
 }
 
 GeneralSolver::Face::~Face() = default;
+
+size_t GeneralSolver::Gridpoint::Hash::operator()(
+        const std::shared_ptr<std::tuple<std::vector<double>, double, double>> &gridpoint) const {
+    std::hash<double> double_hasher;
+    size_t answer = 0;
+    for (double coordinate: std::get<0>(*gridpoint)) {
+        answer ^= double_hasher(coordinate) + 0x9e3779b9 + (answer << 6) + (answer >> 2);
+    }
+    return answer;
+}
+
+size_t
+GeneralSolver::Gridpoint::Compare::operator()(const std::shared_ptr<std::tuple<std::vector<double>, double, double>> &a,
+                                              const std::shared_ptr<std::tuple<std::vector<double>, double, double>> &b) const {
+    return std::get<0>(*a) == std::get<0>(*b);
+}
