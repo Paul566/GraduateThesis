@@ -33,7 +33,7 @@ class GeneralSolver {
 
 private:
     TestReader &test_reader_;
-    double dimension;
+    int dimension;
     std::shared_ptr<Face> root;
     int max_iterations;
     double tolerance = 1e-12;
@@ -43,6 +43,9 @@ private:
     bool b_is_smooth;
     double delta;
     double h_b_b_hat{}; // Hausdorff distance between B and its approximation
+    double x_error;
+    double diameter_a; // an upper bound on the diameter of A
+    double diameter_b; // an upper bound on the diameter of B
 
     void UpdateTAndX();
 
@@ -60,7 +63,9 @@ private:
 
     static double DotProduct(std::vector<double> a, std::vector<double> b);
 
-    static double dist(std::vector<double> vec1, std::vector<double> vec2);
+    static double Norm(const std::vector<double>& vec);
+
+    static double Dist(std::vector<double> vec1, std::vector<double> vec2);
 
     void UpdateHBBHat();
 
@@ -68,6 +73,19 @@ private:
     double DirectedErrorBound(const std::vector<double>& p) const;
 
     void UpdateBasedPoints();
+
+    void MarkSuspiciousFaces(std::shared_ptr<Face> &face);
+
+    // CheckIfFaceSuspicious also updates x_error if encounters possible errors greater than current x_error;
+    bool CheckIfFaceSuspicious(std::shared_ptr<Face>& face);
+
+    // BasedSimplexContainingFace returns dim based points such that they contain the face in their conic hull
+    std::optional<std::vector<std::tuple<std::vector<double>, double>>> BasedSimplexContainingFace(const std::shared_ptr<Face> &face);
+
+    // SimplexContainsPoint returns true if point is in the conic hull of the vectors from simplex
+    bool SimplexContainsPoint(const std::vector<std::vector<double>> &simplex, const std::vector<double> &point) const;
+
+    void RemoveSuspiciousFaces(const std::shared_ptr<Face> &face);
 
 public:
     double t;
