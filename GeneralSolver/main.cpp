@@ -9,8 +9,25 @@
 
 namespace fs = std::filesystem;
 
+void RunRegularSimplexInBall(int dim) {
+    std::string path = "/home/paul/Documents/GraduateThesis/tests/" + std::to_string(dim) + "d/simplex-in-ball/regular";
+
+    SimplexInBallTestReader test_reader = SimplexInBallTestReader(path, dim);
+    GeneralSolver solver_instance(test_reader, dim, 7, true, true);
+
+    std::chrono::steady_clock::time_point time_begin = std::chrono::steady_clock::now();
+    solver_instance.Solve();
+    std::chrono::steady_clock::time_point time_end = std::chrono::steady_clock::now();
+    double time_in_seconds = static_cast<double>(
+                                     std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_begin).count()) / 1000000.;
+
+    std::cout << std::setprecision(16) << time_in_seconds << "\t" << std::abs(solver_instance.t - 1.) << "\n";
+}
 
 int main () {
+    RunRegularSimplexInBall(3);
+
+    /*
     int dim = 3;
 
     std::ofstream test_results;
@@ -20,7 +37,7 @@ int main () {
     std::string path = "/home/paul/Documents/GraduateThesis/tests/" + std::to_string(dim) + "d/simplex-in-ball/";
     for (const auto & test_file: fs::directory_iterator(path)) {
         SimplexInBallTestReader test_reader = SimplexInBallTestReader(test_file.path(), dim);
-        GeneralSolver solver_instance(test_reader, dim);
+        GeneralSolver solver_instance(test_reader, dim, 7, true, true);
 
         std::chrono::steady_clock::time_point time_begin = std::chrono::steady_clock::now();
         solver_instance.Solve();
@@ -33,5 +50,6 @@ int main () {
     }
 
     test_results.close();
+     */
     return 0;
 }

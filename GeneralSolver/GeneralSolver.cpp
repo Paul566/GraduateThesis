@@ -6,6 +6,7 @@
 #include "or-tools_x86_64_Ubuntu-20.04_cpp_v9.6.2534/include/ortools/linear_solver/linear_solver.h"
 #include "or-tools_x86_64_Ubuntu-20.04_cpp_v9.6.2534/include/eigen3/Eigen/Dense"
 
+
 GeneralSolver::GeneralSolver(const TestReader &test_reader, int dimension_, int max_iterations_, bool b_is_unit_ball_,
                              bool b_is_smooth_)
         : test_reader_(const_cast<TestReader &>(test_reader)) {
@@ -17,7 +18,6 @@ GeneralSolver::GeneralSolver(const TestReader &test_reader, int dimension_, int 
     b_is_unit_ball = b_is_unit_ball_;
     b_is_smooth = b_is_smooth_;
     h_b_b_hat = INFINITY;
-    x_error = INFINITY;
 
     std::vector<std::shared_ptr<std::tuple<std::vector<double>, double, double>>> plus_identity;
     std::vector<std::shared_ptr<std::tuple<std::vector<double>, double, double>>> minus_identity;
@@ -39,11 +39,13 @@ GeneralSolver::GeneralSolver(const TestReader &test_reader, int dimension_, int 
         plus_identity.push_back(gridpoint1_ptr);
         minus_identity.push_back(gridpoint2_ptr);
 
-        diameter_a += (test_reader_.SupportA(p1) - test_reader_.SupportA(p2)) * (test_reader_.SupportA(p1) - test_reader_.SupportA(p2));
-        diameter_b += (test_reader_.SupportB(p1) - test_reader_.SupportB(p2)) * (test_reader_.SupportB(p1) - test_reader_.SupportB(p2));
+        norm_a += std::max(test_reader_.SupportA(p1), test_reader_.SupportA(p2)) *
+                  std::max(test_reader_.SupportA(p1), test_reader_.SupportA(p2));
+        norm_b += std::max(test_reader_.SupportB(p1), test_reader_.SupportB(p2)) *
+                  std::max(test_reader_.SupportB(p1), test_reader_.SupportB(p2));
     }
-    diameter_a = sqrt(diameter_a);
-    diameter_b = sqrt(diameter_b);
+    norm_a = sqrt(norm_a);
+    norm_b = sqrt(norm_b);
 
     root = std::make_shared<Face>();
     root->is_root = true;
@@ -65,12 +67,38 @@ GeneralSolver::GeneralSolver(const TestReader &test_reader, int dimension_, int 
 void GeneralSolver::Solve() {
     for (int i = 0; i < max_iterations; ++i) {
         SubdivideSuspiciousFaces(root);
+        UpdateGridData(root);
         UpdateTAndX();
         UpdateHBBHat();
         UpdateBasedPoints();
-        x_error = 0.;
-        MarkSuspiciousFaces(root); // x_error gets updated here
+        UpdateBasedFaceDecompositions();
+        UpdateXErrorVertices();
+        UpdateGridGapData(root);
+
+        faces = 0;
+        non_sus_faces = 0;
+
+        MarkSuspiciousFaces(root);
+        RemoveSuspiciousFaces(root);
     }
+    std::cout << "REPORT\n";
+
+    std::cout << "non sus faces " << non_sus_faces << "\n";
+    std::cout << "faces " << faces << "\n";
+    std::cout << "delta " << delta << "\n";
+    std::cout << "h_b_b_hat " << h_b_b_hat << "\n";
+
+    /*std::cout << "some grid gap data: \n";
+    int i = 0;
+    for (auto [key, val] : grid_gaps_data) {
+        i++;
+        if (i > 10000)
+            break;
+        if (i % 1000 == 0)
+            std::cout << std::get<1>(val) << " " << std::get<2>(val) << "\n";
+    }*/
+
+    std::cout << "END REPORT\n";
 }
 
 void GeneralSolver::UpdateTAndX() {
@@ -172,7 +200,6 @@ GeneralSolver::SubdivideSphericalSimplex(std::vector<std::vector<double>> simple
 
         std::tuple<std::vector<double>, double, double> barycenter_tuple(barycenter, test_reader_.SupportA(barycenter),
                                                                          test_reader_.SupportB(barycenter));
-        grid_data.insert(std::make_shared<std::tuple<std::vector<double>, double, double>>(barycenter_tuple));
 
         return {Dist(barycenter, simplex[0]), ans};
     }
@@ -231,7 +258,7 @@ double GeneralSolver::Dist(std::vector<double> vec1, std::vector<double> vec2) {
 
 void GeneralSolver::UpdateHBBHat() {
     if (b_is_unit_ball) {
-        h_b_b_hat = 4 * delta * delta;
+        h_b_b_hat = 1. / (1. - delta * delta / 2.) - 1.;
     } else {
         // TODO
         throw std::runtime_error("B is not a unit ball, this is not yet supported");
@@ -241,16 +268,33 @@ void GeneralSolver::UpdateHBBHat() {
 void GeneralSolver::UpdateBasedPoints() {
     based_points_data.clear();
 
+    std::vector<std::pair<double, std::vector<double>>> gaps_and_points;
     for (const auto &gridpoint: grid_data) {
-        if (DotProduct(std::get<0>(*gridpoint), x) + t * std::get<2>(*gridpoint) - std::get<1>(*gridpoint) <
-            tolerance) {
-            based_points_data.emplace_back(std::get<0>(*gridpoint), DirectedErrorBound(std::get<0>(*gridpoint)));
-        }
+        gaps_and_points.emplace_back(DotProduct(std::get<0>(*gridpoint), x) + t * std::get<2>(*gridpoint) - std::get<1>(*gridpoint), std::get<0>(*gridpoint));
     }
 
-    if (based_points_data.size() != dimension + 1) {
-        // TODO
-        throw std::runtime_error("greater than dim+1 based vectors, implement this");
+    std::sort(gaps_and_points.begin(), gaps_and_points.end());
+
+    int index = 0;
+
+    while (based_points_data.size() < dimension + 1) {
+        bool new_point = true;
+        for (auto known_based_point : based_points_data) { // check if this is really a new based point
+            if (Dist(std::get<0>(known_based_point), std::get<1>(gaps_and_points[index])) < delta) {
+                new_point = false;
+                break;
+            }
+        }
+
+        if (new_point) {
+            based_points_data.emplace_back(std::get<1>(gaps_and_points[index]), DirectedErrorBound(std::get<1>(gaps_and_points[index])));
+        }
+
+        index++;
+
+        if (index >= gaps_and_points.size()) {
+            throw std::runtime_error("could not find dim+1 distinct based points");
+        }
     }
 }
 
@@ -271,98 +315,9 @@ double GeneralSolver::DirectedErrorBound(const std::vector<double> &p) const {
     }
 }
 
-std::optional<std::vector<std::tuple<std::vector<double>, double>>>
-GeneralSolver::BasedSimplexContainingFace(const std::shared_ptr<GeneralSolver::Face> &face) {
-    for (int i = 0; i < dimension + 1; ++i) {
-        std::vector<std::vector<double>> current_based_simplex;
-        for (int j = 0; j < dimension + 1; ++j) {
-            if (i != j)
-                current_based_simplex.push_back(std::get<0>(based_points_data[j]));
-        }
-
-        bool found_simplex = true;
-        for (const auto& gridpoint : face->gridpoints) {
-            if (!SimplexContainsPoint(current_based_simplex, std::get<0>(*gridpoint))) {
-                found_simplex = false;
-                break;
-            }
-        }
-
-        if (found_simplex) {
-            std::vector<std::tuple<std::vector<double>, double>> ans;
-            for (int j = 0; j < dimension + 1; ++j) {
-                if (i != j)
-                    ans.push_back(based_points_data[j]);
-            }
-            return ans;
-        }
-    }
-    return std::nullopt;
-}
-
-bool GeneralSolver::SimplexContainsPoint(const std::vector<std::vector<double>> &simplex, const std::vector<double> &point) const {
-    Eigen::MatrixXf A(dimension, dimension);
-    for (int i = 0; i < dimension; ++i) {
-        for (int j = 0; j < dimension; ++j) {
-            A(i, j) = static_cast<float>(simplex[j][i]);
-        }
-    }
-
-    Eigen::VectorXf b(dimension);
-    for (int i = 0; i < dimension; ++i) {
-        b(i) = static_cast<float>(point[i]);
-    }
-
-    Eigen::VectorXf coords = A.colPivHouseholderQr().solve(b);
-    return std::all_of(coords.begin(), coords.end(), [](float c) { return c >= 0.; });
-}
-
-bool GeneralSolver::CheckIfFaceSuspicious(std::shared_ptr<Face>& face) {
-    auto based_simplex = BasedSimplexContainingFace(face);
-    if (based_simplex == std::nullopt)
-        return true;
-
-    Eigen::MatrixXf A(dimension, dimension);
-    for (int i = 0; i < dimension; ++i) {
-        for (int j = 0; j < dimension; ++j) {
-            A(i, j) = static_cast<float>(std::get<0>(based_simplex.value()[j])[i]);
-        }
-    }
-
-    Eigen::VectorXf b(dimension);
-    for (int i = 0; i < dimension; ++i) {
-        b(i) = static_cast<float>(std::get<1>(based_simplex.value()[i]));
-    }
-
-    Eigen::VectorXf error_bound = A.colPivHouseholderQr().solve(b);
-    if ((A * error_bound - b).norm() > 1e-6) { // the matrix is singular
-        return true;
-    }
-
-    // update x_error:
-    float error_bound_norm = error_bound.norm();
-    if (error_bound_norm > x_error)
-        x_error = error_bound_norm;
-
-    for (const auto& vertex : face->gridpoints) {
-        auto p = std::get<0>(*vertex);
-        double supp_a = std::get<1>(*vertex);
-        double supp_b = std::get<2>(*vertex);
-        if (DotProduct(x, p) + t * supp_b - supp_a > delta * (diameter_a + t * diameter_b + Norm(x)) + error_bound_norm) {
-            return false;
-        }
-        if (b_is_unit_ball) {
-            if (DotProduct(x, p) + t * supp_b - supp_a > delta * diameter_a + error_bound_norm) {
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
-double GeneralSolver::Norm(const std::vector<double>& vec) {
+double GeneralSolver::Norm(const std::vector<double> &vec) {
     double norm = 0.;
-    for (double coord : vec) {
+    for (double coord: vec) {
         norm += coord * coord;
     }
     return sqrt(norm);
@@ -375,6 +330,190 @@ void GeneralSolver::MarkSuspiciousFaces(std::shared_ptr<Face> &face) {
         }
     } else {
         face->is_suspicious = CheckIfFaceSuspicious(face);
+    }
+}
+
+void GeneralSolver::UpdateBasedFaceDecompositions() {
+    based_face_decompositions.clear();
+
+    for (int absent_i = 0; absent_i < dimension + 1; ++absent_i) {
+
+        Eigen::MatrixXf P_transposed(dimension, dimension);
+        for (int i = 0; i < dimension + 1; ++i) {
+            for (int j = 0; j < dimension; ++j) {
+                if (i > absent_i)
+                    P_transposed(j, i - 1) = static_cast<float>(std::get<0>(based_points_data[i])[j]);
+                if (i < absent_i)
+                    P_transposed(j, i) = static_cast<float>(std::get<0>(based_points_data[i])[j]);
+            }
+        }
+
+        based_face_decompositions.push_back(
+                std::make_shared<Eigen::ColPivHouseholderQR<Eigen::MatrixXf>>(P_transposed.colPivHouseholderQr()));
+    }
+}
+
+std::tuple<int, double, double>
+GeneralSolver::GetGridGapData(const std::tuple<std::vector<double>, double, double> &q) {
+    Eigen::VectorXf q_eigen(dimension);
+    for (int i = 0; i < dimension; ++i)
+        q_eigen[i] = static_cast<float>(std::get<0>(q)[i]);
+
+    for (int absent_index = 0; absent_index < dimension + 1; ++absent_index) {
+        Eigen::VectorXf coords = based_face_decompositions[absent_index]->solve(q_eigen);
+        if (!std::all_of(coords.begin(), coords.end(), [](float c) { return c >= -1e-6; }))
+            continue;
+
+        // at this point we know that this absent_index is the right one
+
+        Eigen::VectorXf x_eigen(dimension);
+        Eigen::VectorXf x_error_vertex(dimension);
+        for (int i = 0; i < dimension; ++i) {
+            x_eigen[i] = static_cast<float>(x[i]);
+            x_error_vertex[i] = static_cast<float>((*x_error_vertices[absent_index])[i]);
+        }
+
+        double l = (x_eigen - x_error_vertex).dot(q_eigen) + t * std::get<2>(q) - std::get<1>(q);
+        double r = 0.;
+        if (b_is_unit_ball)
+            r = norm_a + x_error_vertex.norm();
+        else
+            r = t * norm_b + norm_a + x_error_vertex.norm();
+
+        return {absent_index, l, r};
+    }
+
+    // if we are here, then the based simplex containing the gridpoint is degenerate
+
+    return {0, -INFINITY, INFINITY};
+}
+
+void GeneralSolver::UpdateGridData(const std::shared_ptr<Face> &face) {
+    if (face->is_root) {
+        grid_data.clear();
+    }
+
+    if (face->children.empty()) {
+        for (const auto &gridpoint: face->gridpoints) {
+            grid_data.insert(gridpoint);
+        }
+    } else {
+        for (const auto &child: face->children) {
+            UpdateGridData(child);
+        }
+    }
+}
+
+void GeneralSolver::UpdateGridGapData(const std::shared_ptr<Face> &face) {
+    if (face->is_root) {
+        grid_gaps_data.clear();
+    }
+
+    if (face->children.empty()) {
+        for (const auto &gridpoint: face->gridpoints) {
+            if (grid_gaps_data.find(gridpoint) == grid_gaps_data.end()) {
+                grid_gaps_data[gridpoint] = GetGridGapData(*gridpoint);
+            }
+        }
+    } else {
+        for (const auto &child: face->children) {
+            UpdateGridGapData(child);
+        }
+    }
+}
+
+bool GeneralSolver::CheckIfFaceSuspicious(std::shared_ptr<Face> &face) {
+    faces++;
+
+    bool face_inside_one_based_face = true;
+    for (int i = 1; i < dimension; ++i) {
+        if (std::get<0>(grid_gaps_data[face->gridpoints[i]]) != std::get<0>(grid_gaps_data[face->gridpoints[0]])) {
+            face_inside_one_based_face = false;
+            break;
+        }
+    }
+
+    for (int i = 0; i < dimension; ++i) {
+        double max_edge = 0.; // max length of an edge in face incident to the i-th vertex
+        for (int j = 0; j < dimension; ++j) {
+            double edge_length = Dist(std::get<0>(*face->gridpoints[i]), std::get<0>(*face->gridpoints[j]));
+            if (edge_length > max_edge) {
+                max_edge = edge_length;
+            }
+        }
+
+        double estimation = std::get<1>(grid_gaps_data[face->gridpoints[i]]) - max_edge * std::get<2>(grid_gaps_data[face->gridpoints[i]]);
+        if ((face_inside_one_based_face) && (estimation > 0)) {
+            non_sus_faces++;
+            return false;
+        }
+        if ((! face_inside_one_based_face) && (estimation <= 0)) {
+            return true;
+        }
+    }
+
+    if (! face_inside_one_based_face) {
+        non_sus_faces++;
+        return false;
+    }
+
+    return true;
+}
+
+void GeneralSolver::UpdateXErrorVertices() {
+    x_error_vertices.clear();
+    for (int absent_i = 0; absent_i < dimension + 1; ++absent_i) {
+
+        Eigen::MatrixXf P(dimension, dimension);
+        for (int i = 0; i < dimension + 1; ++i) {
+            for (int j = 0; j < dimension; ++j) {
+                if (i > absent_i)
+                    P(i - 1, j) = static_cast<float>(std::get<0>(based_points_data[i])[j]);
+                if (i < absent_i)
+                    P(i, j) = static_cast<float>(std::get<0>(based_points_data[i])[j]);
+            }
+        }
+
+        Eigen::VectorXf d(dimension); // vector of bounds on (x - \widehat{x}, p)
+        for (int i = 0; i < dimension + 1; ++i) {
+            if (i > absent_i)
+                d(i - 1) = static_cast<float>(DirectedErrorBound(std::get<0>(based_points_data[i])));
+            if (i < absent_i)
+                d(i) = static_cast<float>(DirectedErrorBound(std::get<0>(based_points_data[i])));
+        }
+
+        Eigen::VectorXf x_error_eigen = P.colPivHouseholderQr().solve(d);
+        std::vector<double> x_error_vector;
+        for (float c: x_error_eigen) {
+            x_error_vector.push_back(c);
+        }
+        x_error_vertices.push_back(std::make_shared<std::vector<double>>(x_error_vector));
+    }
+}
+
+void GeneralSolver::RemoveSuspiciousFaces(std::shared_ptr<Face> &face) {
+    bool face_was_leaf = face->children.empty();
+    std::vector<int> indices_to_delete;
+
+    for (int i = static_cast<int>(face->children.size()) - 1; i >= 0; i--) {
+        if (! face->children[i]->children.empty()) { // child was not a leaf
+            RemoveSuspiciousFaces(face->children[i]);
+        }
+
+        if (! face->children[i]->is_suspicious) { // if child is a leaf and is suspicious, or it became a suspicious leaf
+            indices_to_delete.push_back(i);
+        }
+    }
+
+    for (int index : indices_to_delete) {
+        face->children[index] = face->children.back();
+        face->children.pop_back();
+    }
+
+    bool face_became_leaf = face->children.empty();
+
+    if ((face_became_leaf) && (! face_was_leaf)) {
+        face->is_suspicious = false;
     }
 }
 
