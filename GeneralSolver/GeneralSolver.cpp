@@ -186,6 +186,10 @@ std::pair<double, std::vector<std::vector<std::vector<double>>>>
 GeneralSolver::SubdivideSphericalSimplex(std::vector<std::vector<double>> simplex) {
     // returns a pair (max diameter of the simplex in the subdivision, simplices of subdivision)
 
+    if (dimension == 3) { // in case dim=3 use midpoint subdivision
+        return Subdivide2DSimplex(simplex[0], simplex[1], simplex[2]);
+    }
+
     std::vector<double> barycenter = SphericalBarycenter(simplex);
     std::vector<std::vector<std::vector<double>>> ans;
     if (simplex.size() == 2) {
@@ -515,6 +519,61 @@ void GeneralSolver::RemoveSuspiciousFaces(std::shared_ptr<Face> &face) {
     if ((face_became_leaf) && (! face_was_leaf)) {
         face->is_suspicious = false;
     }
+}
+
+std::pair<double, std::vector<std::vector<std::vector<double>>>>
+GeneralSolver::Subdivide2DSimplex(const std::vector<double>& v1, const std::vector<double>& v2,
+                                  const std::vector<double>& v3) {
+    // returns a pair (max diameter of the simplex in the subdivision, simplices of subdivision)
+    // subdivides a triangle in the following way:
+    //
+    //       /\          /\
+    //      /__\    ->  /\/\
+    //
+
+    if (dimension != 3) {
+        throw std::runtime_error("this is not a three-dimensional problem, but trying to use Subdivide2DSimplex");
+    }
+
+    std::vector<double> c1({v2[0] + v3[0], v2[1] + v3[1], v2[2] + v3[2]});
+    std::vector<double> c2({v1[0] + v3[0], v1[1] + v3[1], v1[2] + v3[2]});
+    std::vector<double> c3({v1[0] + v2[0], v1[1] + v2[1], v1[2] + v2[2]});
+
+    c1 = Normalize(c1);
+    c2 = Normalize(c2);
+    c3 = Normalize(c3);
+
+    double max_edge = std::max(Dist(c1, c2), std::max(Dist(c1, c3), Dist(c2, c3)));
+
+    std::vector<std::vector<double>> simplex1;
+    std::vector<std::vector<double>> simplex2;
+    std::vector<std::vector<double>> simplex3;
+    std::vector<std::vector<double>> simplex4;
+
+    simplex1.push_back(v1);
+    simplex1.push_back(c2);
+    simplex1.push_back(c3);
+
+    simplex2.push_back(v2);
+    simplex2.push_back(c1);
+    simplex2.push_back(c3);
+
+    simplex3.push_back(v3);
+    simplex3.push_back(c1);
+    simplex3.push_back(c2);
+
+    simplex4.push_back(c1);
+    simplex4.push_back(c2);
+    simplex4.push_back(c3);
+
+    std::vector<std::vector<std::vector<double>>> subdivision;
+
+    subdivision.push_back(simplex1);
+    subdivision.push_back(simplex2);
+    subdivision.push_back(simplex3);
+    subdivision.push_back(simplex4);
+
+    return {max_edge, subdivision};
 }
 
 GeneralSolver::Face::Face() {

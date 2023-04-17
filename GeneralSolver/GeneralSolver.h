@@ -72,6 +72,9 @@ private:
     std::pair<double, std::vector<std::vector<std::vector<double>>>>
     SubdivideSphericalSimplex(std::vector<std::vector<double>> simplex);
 
+    std::pair<double, std::vector<std::vector<std::vector<double>>>>
+    Subdivide2DSimplex(const std::vector<double>& v1, const std::vector<double>& v2, const std::vector<double>& v3);
+
     void SubdivideSuspiciousFaces(const std::shared_ptr<Face> &face);
 
     static std::vector<double> Normalize(std::vector<double> vec);
